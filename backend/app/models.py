@@ -52,6 +52,30 @@ class BusinessMembership(Base):
     user: Mapped[User] = relationship(back_populates="memberships")
 
 
+class BusinessInvitation(Base):
+    __tablename__ = "business_invitations"
+    __table_args__ = (CheckConstraint("role IN ('admin', 'sales', 'viewer')", name="ck_invitation_role_valid"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    invited_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class TokenRevocation(Base):
+    __tablename__ = "token_revocations"
+
+    token_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Customer(Base):
     __tablename__ = "customers"
     __table_args__ = (UniqueConstraint("business_id", "email", name="uq_customer_business_email"),)

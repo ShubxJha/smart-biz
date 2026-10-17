@@ -21,7 +21,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     full_name: str = Field(min_length=1, max_length=160)
     password: str = Field(min_length=8, max_length=128)
-    business_name: str = Field(min_length=1, max_length=160)
+    business_name: str | None = Field(default=None, min_length=1, max_length=160)
 
 
 class LoginRequest(BaseModel):
@@ -62,6 +62,34 @@ class MemberCreate(BaseModel):
 class MemberOut(BaseModel):
     user: UserOut
     role: str
+
+
+class InvitationCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    role: str = Field(pattern="^(admin|sales|viewer)$")
+
+
+class InvitationCreated(BaseModel):
+    id: int
+    business_id: int
+    email: str
+    role: str
+    token: str
+    expires_at: datetime
+
+
+class InvitationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    business_id: int
+    email: str
+    role: str
+    expires_at: datetime
+    accepted_at: datetime | None
+
+
+class InvitationAccept(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
 
 
 class CustomerCreate(BaseModel):

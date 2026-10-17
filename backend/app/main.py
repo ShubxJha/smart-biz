@@ -1,16 +1,20 @@
-from fastapi import Depends, FastAPI, Header, HTTPException, status
-from sqlalchemy import func, select
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app import models, schemas
-from app.auth import ACCESS_TOKEN_TTL, create_access_token, get_business_membership, get_current_user, hash_password, verify_password
+from app.auth import ACCESS_TOKEN_TTL, create_access_token, decode_access_token, get_business_membership, get_current_user, hash_password, verify_password
 
 app = FastAPI(
     title="SmartBiz API",
     description="Sales management and business analytics for small businesses.",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 
@@ -57,8 +61,9 @@ def health() -> dict[str, str]:
 def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     user = models.User(email=email, full_name=payload.full_name.strip(), password_hash=hash_password(payload.password))
-    business = models.Business(name=payload.business_name.strip())
-    user.memberships.append(models.BusinessMembership(business=business, role="owner"))
+    if payload.business_name is not None:
+        business = models.Business(name=payload.business_name.strip())
+        user.memberships.append(models.BusinessMembership(business=business, role="owner"))
     db.add(user)
     try:
         db.commit()
@@ -85,6 +90,23 @@ def current_account(current_user: models.User = Depends(get_current_user), db: S
         .where(models.BusinessMembership.user_id == current_user.id)
     ).all()
     return {"user": current_user, "memberships": [{"business": item.business, "role": item.role} for item in memberships]}
+
+
+@app.post("/api/v1/auth/logout", tags=["authentication"])
+def logout(
+    payload: dict = Depends(decode_access_token),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    db.execute(delete(models.TokenRevocation).where(models.TokenRevocation.expires_at <= now))
+    db.add(models.TokenRevocation(
+        token_id=payload["jti"],
+        user_id=current_user.id,
+        expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
+    ))
+    db.commit()
+    return {"status": "logged_out"}
 
 
 @app.post("/api/v1/businesses", response_model=schemas.BusinessOut, status_code=201, tags=["businesses"])
@@ -138,6 +160,140 @@ def list_business_members(membership: models.BusinessMembership = Depends(requir
         .order_by(models.BusinessMembership.id)
     ).all()
     return [{"user": item.user, "role": item.role} for item in records]
+
+
+@app.delete("/api/v1/businesses/members/{user_id}", status_code=204, tags=["businesses"])
+def remove_business_member(
+    user_id: int,
+    membership: models.BusinessMembership = Depends(require_roles("owner", "admin")),
+    db: Session = Depends(get_db),
+):
+    target = db.scalar(select(models.BusinessMembership).where(
+        models.BusinessMembership.business_id == membership.business_id,
+        models.BusinessMembership.user_id == user_id,
+    ))
+    if target is None:
+        raise HTTPException(status_code=404, detail="Business member not found")
+    if target.role == "owner":
+        raise HTTPException(status_code=409, detail="Owners cannot be removed through this endpoint")
+    if membership.role == "admin" and target.role != "viewer" and target.role != "sales":
+        raise HTTPException(status_code=403, detail="Admins can only remove sales and viewer members")
+    db.delete(target)
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.post("/api/v1/businesses/invitations", response_model=schemas.InvitationCreated, status_code=201, tags=["businesses"])
+def create_business_invitation(
+    payload: schemas.InvitationCreate,
+    membership: models.BusinessMembership = Depends(require_roles("owner", "admin")),
+    db: Session = Depends(get_db),
+):
+    if payload.role == "admin" and membership.role != "owner":
+        raise HTTPException(status_code=403, detail="Only the business owner can grant the admin role")
+    email = payload.email.strip().lower()
+    existing_member = db.scalar(
+        select(models.BusinessMembership)
+        .join(models.User)
+        .where(models.BusinessMembership.business_id == membership.business_id, models.User.email == email)
+    )
+    if existing_member is not None:
+        raise HTTPException(status_code=409, detail="This user is already a business member")
+    now = datetime.now(timezone.utc)
+    existing_invitation = db.scalar(select(models.BusinessInvitation).where(
+        models.BusinessInvitation.business_id == membership.business_id,
+        models.BusinessInvitation.email == email,
+        models.BusinessInvitation.accepted_at.is_(None),
+        models.BusinessInvitation.expires_at > now,
+    ))
+    if existing_invitation is not None:
+        raise HTTPException(status_code=409, detail="A pending invitation already exists for this email")
+    token = secrets.token_urlsafe(32)
+    invitation = models.BusinessInvitation(
+        business_id=membership.business_id,
+        invited_by_user_id=membership.user_id,
+        email=email,
+        role=payload.role,
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        expires_at=now + timedelta(days=7),
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+    return {
+        "id": invitation.id,
+        "business_id": invitation.business_id,
+        "email": invitation.email,
+        "role": invitation.role,
+        "token": token,
+        "expires_at": invitation.expires_at,
+    }
+
+
+@app.get("/api/v1/businesses/invitations", response_model=list[schemas.InvitationOut], tags=["businesses"])
+def list_business_invitations(
+    membership: models.BusinessMembership = Depends(require_roles("owner", "admin")),
+    db: Session = Depends(get_db),
+):
+    return db.scalars(select(models.BusinessInvitation).where(
+        models.BusinessInvitation.business_id == membership.business_id,
+        models.BusinessInvitation.accepted_at.is_(None),
+        models.BusinessInvitation.expires_at > datetime.now(timezone.utc),
+    ).order_by(models.BusinessInvitation.created_at.desc())).all()
+
+
+@app.delete("/api/v1/businesses/invitations/{invitation_id}", status_code=204, tags=["businesses"])
+def revoke_business_invitation(
+    invitation_id: int,
+    membership: models.BusinessMembership = Depends(require_roles("owner", "admin")),
+    db: Session = Depends(get_db),
+):
+    invitation = db.scalar(select(models.BusinessInvitation).where(
+        models.BusinessInvitation.id == invitation_id,
+        models.BusinessInvitation.business_id == membership.business_id,
+        models.BusinessInvitation.accepted_at.is_(None),
+    ))
+    if invitation is None:
+        raise HTTPException(status_code=404, detail="Pending invitation not found")
+    if membership.role == "admin" and invitation.role == "admin":
+        raise HTTPException(status_code=403, detail="Admins cannot revoke admin invitations")
+    db.delete(invitation)
+    db.commit()
+    return Response(status_code=204)
+
+
+@app.post("/api/v1/auth/invitations/accept", response_model=schemas.MembershipOut, tags=["authentication"])
+def accept_business_invitation(
+    payload: schemas.InvitationAccept,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    token_hash = hashlib.sha256(payload.token.encode("utf-8")).hexdigest()
+    invitation = db.scalar(select(models.BusinessInvitation).where(
+        models.BusinessInvitation.token_hash == token_hash,
+    ).with_for_update())
+    if invitation is None or invitation.accepted_at is not None:
+        raise HTTPException(status_code=404, detail="Invitation is invalid or already used")
+    if invitation.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="Invitation has expired")
+    if invitation.email != current_user.email:
+        raise HTTPException(status_code=403, detail="Sign in with the email address the invitation was sent to")
+    already_member = db.scalar(select(models.BusinessMembership).where(
+        models.BusinessMembership.business_id == invitation.business_id,
+        models.BusinessMembership.user_id == current_user.id,
+    ))
+    if already_member is not None:
+        raise HTTPException(status_code=409, detail="You are already a member of this business")
+    invitation.accepted_at = datetime.now(timezone.utc)
+    membership = models.BusinessMembership(
+        business_id=invitation.business_id,
+        user_id=current_user.id,
+        role=invitation.role,
+    )
+    db.add(membership)
+    db.commit()
+    business = db.get(models.Business, invitation.business_id)
+    return {"business": business, "role": membership.role}
 
 
 @app.post("/api/v1/customers", response_model=schemas.CustomerOut, status_code=201, tags=["customers"])

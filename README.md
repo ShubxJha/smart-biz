@@ -38,9 +38,13 @@ Money values use integer minor units. For INR, `5000` represents ₹50.00. Sales
 
 All business data routes require both `Authorization: Bearer <token>` and `X-Business-Id`. The API verifies that the signed-in user belongs to the selected business. Roles are `owner`, `admin`, `sales`, and `viewer`. Owners and admins can manage products; owners, admins, and sales members can create customers and record sales. Viewers can read business data. Only owners can grant the admin role.
 
-To add an existing SmartBiz user to the selected business, an owner or admin can call `POST /api/v1/businesses/members` with `{"email":"staff@example.com","role":"sales"}`. The user must register first. Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`.
+Owners and admins can invite a new or existing account with `POST /api/v1/businesses/invitations`, sending `{"email":"staff@example.com","role":"sales"}`. The response includes a one-time token; the user must register or log in using the invited email, then call `POST /api/v1/auth/invitations/accept` with `{"token":"<invitation-token>"}`. Registration can omit `business_name` when creating an account to accept an invitation. Invitations expire after seven days and store only a hash of the token. There is no email delivery or address verification yet, so this flow is for local development; add verified email delivery before using it for real accounts.
 
-The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment, enable HTTPS, and add token revocation/rate limiting before a public launch. Access tokens currently expire after 30 minutes; refresh and logout flows are not implemented yet.
+Owners and admins can list pending invitations with `GET /api/v1/businesses/invitations` and revoke one with `DELETE /api/v1/businesses/invitations/{invitation_id}`. `DELETE /api/v1/businesses/members/{user_id}` removes a non-owner member from the selected business; owners cannot be removed through this endpoint. Membership removal blocks that user's future access to the business. `POST /api/v1/auth/logout` revokes the current access token immediately. Tokens expire after 30 minutes in any case.
+
+Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
+
+The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment, enable HTTPS, and add rate limiting before a public launch. Access tokens expire after 30 minutes; logout revokes the current token, while refresh-token rotation is not implemented yet.
 
 ## Stack and layout
 
@@ -53,8 +57,7 @@ The ignored `.env` file holds local secrets; `.env.example` contains placeholder
 
 ## Next milestones
 
-1. Add invitation/acceptance flow and session revocation, then cover identity and role boundaries with automated checks.
-2. Add date-range analytics, sales filters, and reporting exports.
-3. Build the web dashboard and connect it to the API.
-4. Build Flutter sales capture and inventory views against the same API.
-5. Add deployment configuration and automated test coverage.
+1. Add date-range analytics, sales filters, and reporting exports.
+2. Build the web dashboard and connect it to the API.
+3. Build Flutter sales capture and inventory views against the same API.
+4. Add email delivery for business invitations and complete deployment configuration.

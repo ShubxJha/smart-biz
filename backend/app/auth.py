@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -21,6 +22,14 @@ password_hasher = PasswordHash.recommended()
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def unauthorized_token() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired access token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def hash_password(password: str) -> str:
     return password_hasher.hash(password)
 
@@ -32,33 +41,37 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(user_id: int) -> str:
     now = datetime.now(timezone.utc)
     return jwt.encode(
-        {"sub": str(user_id), "iat": now, "exp": now + ACCESS_TOKEN_TTL, "type": "access"},
+        {"sub": str(user_id), "jti": secrets.token_urlsafe(32), "iat": now, "exp": now + ACCESS_TOKEN_TTL, "type": "access"},
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
     )
 
 
-def get_current_user(
+def decode_access_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-) -> models.User:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired access token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+) -> dict:
     if credentials is None:
-        raise unauthorized
+        raise unauthorized_token()
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload["sub"])
-        if payload.get("type") != "access":
-            raise unauthorized
+        int(payload["sub"])
+        if payload.get("type") != "access" or not payload.get("jti"):
+            raise InvalidTokenError("Invalid token claims")
     except (InvalidTokenError, KeyError, TypeError, ValueError):
-        raise unauthorized from None
+        raise unauthorized_token() from None
+    return payload
+
+
+def get_current_user(
+    payload: dict = Depends(decode_access_token),
+    db: Session = Depends(get_db),
+) -> models.User:
+    user_id = int(payload["sub"])
     user = db.get(models.User, user_id)
     if user is None or not user.active:
-        raise unauthorized
+        raise unauthorized_token()
+    if db.get(models.TokenRevocation, payload["jti"]) is not None:
+        raise unauthorized_token()
     return user
 
 

@@ -8,10 +8,14 @@ SmartBiz is a modular monolith for its first release. The web dashboard and Flut
 
 - Users authenticate with email and password; passwords are stored using Argon2 hashes.
 - The API issues signed HS256 access tokens with a 30 minute lifetime.
+- Each token has a unique identifier. Logout stores that identifier until its expiry, so the token is rejected immediately.
 - A `business_memberships` row links each user to a business and carries one of four roles: owner, admin, sales, viewer.
 - Tenant-scoped API requests provide a business ID, and the API verifies membership before querying any business data.
 - The owner can grant admin. Owners and admins can manage products; owners, admins, and sales members can create customers and sales. All members can read business data.
-- Registration creates the first user, business, and owner membership in one transaction. Adding another member currently requires that person's account to exist; invitation acceptance and membership revocation are future work.
+- Registration can create a user alone or create a business and owner membership in one transaction.
+- Owners and admins can create seven-day invitations. Only a hash of each invitation token is stored; accepting one requires an authenticated account with the invited email.
+- Membership removal immediately blocks future requests to that business, even while the user's bearer token is still valid.
+- Invitation tokens are returned to the creating owner/admin for manual delivery. Email delivery and address verification are not implemented, so the flow is for local development until those controls are added.
 
 ## Initial domain boundaries
 
