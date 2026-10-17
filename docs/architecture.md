@@ -31,4 +31,4 @@ SmartBiz is a modular monolith for its first release. The web dashboard and Flut
 
 ## Local development
 
-Docker Compose runs the API and PostgreSQL. Development credentials and the JWT secret in the compose file are local-only. Production secrets must come from the deployment environment. Configure a random `JWT_SECRET` of at least 32 characters before starting the API.
+Docker Compose runs the API and PostgreSQL. Local secrets belong in the ignored root `.env` file; `.env.example` contains placeholders. Production secrets must come from the deployment environment. Configure a random `JWT_SECRET` of at least 32 characters before starting the API.

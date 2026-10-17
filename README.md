@@ -7,6 +7,8 @@ SmartBiz is a sales management and business analytics platform for small busines
 Install Docker Desktop, then from the repository root:
 
 ```powershell
+Copy-Item .env.example .env
+# Edit .env: replace the placeholders with a random database password and a random JWT_SECRET of at least 32 characters.
 docker compose up --build
 ```
 
@@ -17,7 +19,7 @@ The API is available at `http://localhost:8000`; interactive API docs are at `ht
 Registration creates an account, a business, and an owner membership. Passwords are hashed with Argon2; login returns a signed bearer access token that expires after 30 minutes.
 
 ```powershell
-$auth = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/auth/register -ContentType 'application/json' -Body '{"email":"owner@example.com","full_name":"Sample Owner","password":"change-this-password","business_name":"Sample Shop"}'
+$auth = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/auth/register -ContentType 'application/json' -Body '{"email":"owner@example.com","full_name":"Sample Owner","password":"<YOUR_UNIQUE_PASSWORD>","business_name":"Sample Shop"}'
 $businessId = $auth.memberships[0].business.id
 $headers = @{ Authorization = "Bearer $($auth.access_token)"; 'X-Business-Id' = "$businessId" }
 ```
@@ -38,7 +40,7 @@ All business data routes require both `Authorization: Bearer <token>` and `X-Bus
 
 To add an existing SmartBiz user to the selected business, an owner or admin can call `POST /api/v1/businesses/members` with `{"email":"staff@example.com","role":"sales"}`. The user must register first. Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, and `GET /api/v1/auth/me`.
 
-The compose JWT secret is for local development only. Set a randomly generated secret of at least 32 characters in deployment, enable HTTPS, and add token revocation/rate limiting before a public launch. Access tokens currently expire after 30 minutes; refresh and logout flows are not implemented yet.
+The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment, enable HTTPS, and add token revocation/rate limiting before a public launch. Access tokens currently expire after 30 minutes; refresh and logout flows are not implemented yet.
 
 ## Stack and layout
 

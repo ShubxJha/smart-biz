@@ -1,11 +1,15 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+psycopg://smartbiz:smartbiz_dev@localhost:5432/smartbiz"
+DATABASE_URL = URL.create(
+    drivername="postgresql+psycopg",
+    username=os.environ["DB_USER"],
+    password=os.environ["DB_PASSWORD"],
+    host=os.getenv("DB_HOST", "localhost"),
+    database=os.getenv("DB_NAME", "smartbiz"),
 )
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
