@@ -1,12 +1,22 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BusinessCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     currency: str = Field(default="INR", min_length=3, max_length=3, pattern="^[A-Z]{3}$")
     timezone: str = Field(default="Asia/Kolkata", max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def timezone_must_be_valid(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            raise ValueError("timezone must be a valid IANA timezone") from None
+        return value
 
 
 class BusinessOut(BaseModel):

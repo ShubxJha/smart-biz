@@ -34,6 +34,16 @@ Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/v1/dashboard/summar
 
 Money values use integer minor units. For INR, `5000` represents ₹50.00. Sales snapshot product name and price, decrement stock transactionally, and reject cross-business product/customer references.
 
+## Analytics and reports
+
+`GET /api/v1/dashboard/summary` and `GET /api/v1/sales` default to the previous 30 calendar days in the business timezone. Supply inclusive `from_date` and `to_date` values (`YYYY-MM-DD`) to choose a range; ranges are limited to 366 days. Sales lists also accept `customer_id`, `limit`, and `offset`.
+
+- `GET /api/v1/analytics/sales-trend?interval=day` supports `day`, `week`, or `month` buckets and fills empty buckets with zeroes.
+- `GET /api/v1/analytics/top-products` returns units sold and revenue by product name.
+- `GET /api/v1/reports/sales.csv` downloads line-item sales details in the business timezone; exports over 50,000 sales are rejected so they are not silently truncated.
+
+All date filters are interpreted as business-local calendar dates and converted to UTC for querying. CSV text cells are escaped against spreadsheet formula injection.
+
 ## Identity and roles
 
 All business data routes require both `Authorization: Bearer <token>` and `X-Business-Id`. The API verifies that the signed-in user belongs to the selected business. Roles are `owner`, `admin`, `sales`, and `viewer`. Owners and admins can manage products; owners, admins, and sales members can create customers and record sales. Viewers can read business data. Only owners can grant the admin role.
@@ -57,7 +67,6 @@ The ignored `.env` file holds local secrets; `.env.example` contains placeholder
 
 ## Next milestones
 
-1. Add date-range analytics, sales filters, and reporting exports.
-2. Build the web dashboard and connect it to the API.
-3. Build Flutter sales capture and inventory views against the same API.
-4. Add email delivery for business invitations and complete deployment configuration.
+1. Build the web dashboard and connect it to the API.
+2. Build Flutter sales capture and inventory views against the same API.
+3. Add email delivery for business invitations and complete deployment configuration.

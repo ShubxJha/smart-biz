@@ -24,6 +24,8 @@ SmartBiz is a modular monolith for its first release. The web dashboard and Flut
 - CRM: customers and their contact details.
 - Sales: orders and immutable line-item snapshots (product name, unit price, quantity, discounts, and tax at time of sale).
 - Analytics: read-only aggregates derived from completed sales; reports must use the business timezone and date range.
+- Date filters are inclusive business-local dates converted to UTC instants; sales trend buckets are grouped in local calendar time.
+- CSV exports include line-item snapshots, escape untrusted spreadsheet text, and reject ranges exceeding the export row cap rather than returning partial data.
 
 ## Early design constraints
 
