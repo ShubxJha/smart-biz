@@ -7,7 +7,60 @@ from urllib.parse import quote
 
 
 class EmailDeliveryError(Exception):
-    """The invitation exists, but its email could not be sent."""
+    """A persisted invitation or verification link could not be emailed."""
+
+
+def send_email_verification(*, recipient: str, token: str) -> bool:
+    """Send an account verification link through configured SMTP."""
+    host = os.getenv("SMTP_HOST", "").strip()
+    if not host:
+        return False
+    sender = os.getenv("SMTP_FROM_EMAIL", "").strip()
+    if not sender:
+        raise EmailDeliveryError("SMTP_FROM_EMAIL must be configured when SMTP is enabled")
+    try:
+        port = int(os.getenv("SMTP_PORT", "587"))
+    except ValueError as exc:
+        raise EmailDeliveryError("SMTP_PORT must be a valid port number") from exc
+    tls_mode = os.getenv("SMTP_TLS_MODE", "starttls").strip().lower()
+    if tls_mode not in {"starttls", "ssl", "none"}:
+        raise EmailDeliveryError("SMTP_TLS_MODE must be starttls, ssl, or none")
+    url = f"{os.getenv('APP_BASE_URL', 'http://localhost:3000').rstrip('/')}/#verify={quote(token)}"
+    message = EmailMessage()
+    try:
+        message["Subject"] = "Verify your SmartBiz email address"
+        message["From"] = sender
+        message["To"] = recipient
+        message.set_content(f"Verify your SmartBiz email address within 24 hours: {url}\n")
+        message.add_alternative(
+            "<!doctype html><html><body style='font-family:Arial,sans-serif;color:#20332d'>"
+            "<h2>Verify your email address</h2><p>Confirm your email to finish setting up SmartBiz.</p>"
+            f"<p><a href=\"{escape(url, quote=True)}\">Verify email address</a></p>"
+            "<p>This link expires in 24 hours and can be used once.</p></body></html>",
+            subtype="html",
+        )
+    except (ValueError, TypeError) as exc:
+        raise EmailDeliveryError("Email verification configuration is invalid") from exc
+    username, password = os.getenv("SMTP_USERNAME", ""), os.getenv("SMTP_PASSWORD", "")
+    context = ssl.create_default_context()
+    try:
+        if tls_mode == "ssl":
+            with smtplib.SMTP_SSL(host, port, context=context, timeout=15) as client:
+                if username:
+                    client.login(username, password)
+                client.send_message(message)
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as client:
+                client.ehlo()
+                if tls_mode == "starttls":
+                    client.starttls(context=context)
+                    client.ehlo()
+                if username:
+                    client.login(username, password)
+                client.send_message(message)
+    except (OSError, smtplib.SMTPException, ValueError) as exc:
+        raise EmailDeliveryError("SMTP could not deliver the verification email") from exc
+    return True
 
 
 def send_business_invitation(

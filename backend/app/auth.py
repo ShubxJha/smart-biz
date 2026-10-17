@@ -68,7 +68,7 @@ def get_current_user(
 ) -> models.User:
     user_id = int(payload["sub"])
     user = db.get(models.User, user_id)
-    if user is None or not user.active:
+    if user is None or not user.active or not user.email_verified:
         raise unauthorized_token()
     if db.get(models.TokenRevocation, payload["jti"]) is not None:
         raise unauthorized_token()

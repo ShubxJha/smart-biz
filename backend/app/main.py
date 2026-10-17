@@ -8,15 +8,16 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app import models, schemas
-from app.emailing import EmailDeliveryError, send_business_invitation
+from app.emailing import EmailDeliveryError, send_business_invitation, send_email_verification
 from app.auth import ACCESS_TOKEN_TTL, create_access_token, decode_access_token, get_business_membership, get_current_user, hash_password, verify_password
 
 app = FastAPI(
@@ -72,6 +73,44 @@ def auth_response(user: models.User, db: Session) -> dict:
         "user": user,
         "memberships": [{"business": membership.business, "role": membership.role} for membership in memberships],
     }
+
+
+def enforce_auth_rate_limit(request: Request, db: Session, action: str, identity: str, limit: int) -> None:
+    """Apply a shared PostgreSQL fixed-window limit to auth actions."""
+    now = datetime.now(timezone.utc)
+    window = now.replace(second=0, microsecond=0)
+    client_ip = request.client.host if request.client else "unknown"
+    if os.getenv("RATE_LIMIT_TRUST_PROXY", "false").strip().lower() == "true":
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        if forwarded_for.strip():
+            client_ip = forwarded_for.split(",", 1)[0].strip()
+    identities = {f"{action}:ip:{client_ip}", f"{action}:identity:{identity}"}
+    for raw_key in identities:
+        key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        statement = pg_insert(models.RateLimitBucket).values(
+            key=key, window_start=window, request_count=1,
+        ).on_conflict_do_update(
+            index_elements=[models.RateLimitBucket.key, models.RateLimitBucket.window_start],
+            set_={"request_count": models.RateLimitBucket.request_count + 1},
+        ).returning(models.RateLimitBucket.request_count)
+        count = db.scalar(statement)
+        if count > limit:
+            db.commit()
+            raise HTTPException(status_code=429, detail="Too many attempts. Please try again in a minute.", headers={"Retry-After": "60"})
+    db.execute(delete(models.RateLimitBucket).where(models.RateLimitBucket.window_start < now - timedelta(minutes=5)))
+    db.commit()
+
+
+def create_verification(db: Session, user: models.User) -> tuple[str, str]:
+    token = secrets.token_urlsafe(32)
+    db.execute(delete(models.EmailVerification).where(models.EmailVerification.user_id == user.id))
+    db.add(models.EmailVerification(
+        user_id=user.id,
+        token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    ))
+    db.commit()
+    return token, f"{os.getenv('APP_BASE_URL', 'http://localhost:3000').rstrip('/')}/#verify={token}"
 
 
 def reporting_window(
@@ -136,10 +175,17 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/api/v1/auth/register", response_model=schemas.AuthOut, status_code=201, tags=["authentication"])
-def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
+@app.get("/ready", tags=["operations"])
+def ready(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.execute(select(1))
+    return {"status": "ready"}
+
+
+@app.post("/api/v1/auth/register", response_model=schemas.RegistrationOut, status_code=201, tags=["authentication"])
+def register(payload: schemas.RegisterRequest, request: Request, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
-    user = models.User(email=email, full_name=payload.full_name.strip(), password_hash=hash_password(payload.password))
+    enforce_auth_rate_limit(request, db, "register", email, 5)
+    user = models.User(email=email, full_name=payload.full_name.strip(), password_hash=hash_password(payload.password), email_verified=False)
     if payload.business_name is not None:
         business = models.Business(name=payload.business_name.strip())
         user.memberships.append(models.BusinessMembership(business=business, role="owner"))
@@ -150,15 +196,58 @@ def register(payload: schemas.RegisterRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="An account with this email already exists") from None
     db.refresh(user)
-    return auth_response(user, db)
+    token, verification_url = create_verification(db, user)
+    try:
+        email_sent = send_email_verification(recipient=user.email, token=token)
+    except EmailDeliveryError as exc:
+        logger.warning("Verification email delivery failed for user %s: %s", user.id, exc)
+        delivery_status = "failed"
+    else:
+        delivery_status = "sent" if email_sent else "manual"
+    return {
+        "message": "Check your email to verify your account before signing in.",
+        "delivery_status": delivery_status,
+        "verification_url": verification_url if delivery_status != "sent" else None,
+    }
 
 
 @app.post("/api/v1/auth/login", response_model=schemas.AuthOut, tags=["authentication"])
-def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = db.scalar(select(models.User).where(models.User.email == payload.email.strip().lower()))
+def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+    enforce_auth_rate_limit(request, db, "login", email, 10)
+    user = db.scalar(select(models.User).where(models.User.email == email))
     if user is None or not user.active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password", headers={"WWW-Authenticate": "Bearer"})
+    if not user.email_verified:
+        token, verification_url = create_verification(db, user)
+        try:
+            email_sent = send_email_verification(recipient=user.email, token=token)
+        except EmailDeliveryError:
+            email_sent = False
+        detail = {"message": "Verify your email before signing in.", "delivery_status": "sent" if email_sent else "manual", "verification_url": None if email_sent else verification_url}
+        raise HTTPException(status_code=403, detail=detail)
     return auth_response(user, db)
+
+
+@app.post("/api/v1/auth/verify-email", status_code=204, tags=["authentication"])
+def verify_email(payload: schemas.EmailVerificationRequest, request: Request, db: Session = Depends(get_db)):
+    enforce_auth_rate_limit(request, db, "verify", "verification", 20)
+    token_hash = hashlib.sha256(payload.token.encode("utf-8")).hexdigest()
+    verification = db.scalar(select(models.EmailVerification).where(models.EmailVerification.token_hash == token_hash).with_for_update())
+    if verification is None:
+        raise HTTPException(status_code=404, detail="Verification link is invalid or already used")
+    if verification.expires_at <= datetime.now(timezone.utc):
+        db.delete(verification)
+        db.commit()
+        raise HTTPException(status_code=410, detail="Verification link has expired. Sign in to request a new one.")
+    user = db.get(models.User, verification.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    user.email_verified = True
+    db.delete(verification)
+    db.execute(delete(models.EmailVerification).where(models.EmailVerification.user_id == user.id))
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/api/v1/auth/me", response_model=schemas.AccountOut, tags=["authentication"])
@@ -374,6 +463,8 @@ def accept_business_invitation(
         raise HTTPException(status_code=410, detail="Invitation has expired")
     if invitation.email != current_user.email:
         raise HTTPException(status_code=403, detail="Sign in with the email address the invitation was sent to")
+    if not current_user.email_verified:
+        raise HTTPException(status_code=403, detail="Verify your email address before accepting this invitation")
     already_member = db.scalar(select(models.BusinessMembership).where(
         models.BusinessMembership.business_id == invitation.business_id,
         models.BusinessMembership.user_id == current_user.id,

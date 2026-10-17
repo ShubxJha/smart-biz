@@ -16,7 +16,7 @@ The dashboard is available at `http://localhost:3000`. The API is available at `
 
 ## Register and call the API
 
-Registration creates an account, a business, and an owner membership. Passwords are hashed with Argon2; login returns a signed bearer access token that expires after 30 minutes.
+Registration creates an account, a business, and an owner membership, then sends a one-time email verification link that expires after 24 hours. Set up SMTP to deliver verification links. Without SMTP, the API returns a manual verification URL for local development. Login and invitation acceptance require a verified email. Existing accounts must sign in once after the verification migration to receive a verification link. Passwords are hashed with Argon2; login returns a signed bearer access token that expires after 30 minutes. Registration and login have shared PostgreSQL-backed per-minute limits by client address and normalized email, so limits apply across API replicas.
 
 You can also create an account from the dashboard at `http://localhost:3000`. Sign in to view sales metrics, revenue trends, top products, recent orders, and download a CSV report. The dashboard stores its access token only for the current browser tab session. To run the web app outside Docker, use Node.js 22 or newer from `web/` with `npm install` followed by `npm run dev`; configure `NEXT_PUBLIC_API_URL` when the API is hosted somewhere other than `http://localhost:8000`. Set `WEB_ORIGINS` on the API to the dashboard's exact origin when using a different local address.
 
@@ -56,7 +56,15 @@ Owners and admins can list pending invitations with `GET /api/v1/businesses/invi
 
 Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
 
-The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment, enable HTTPS, and add rate limiting before a public launch. Access tokens expire after 30 minutes; logout revokes the current token, while refresh-token rotation is not implemented yet.
+The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment. Access tokens expire after 30 minutes; logout revokes the current token, while refresh-token rotation is not implemented yet.
+
+## Deployment
+
+Docker Compose is the reference deployment. Before public launch, set `DB_PASSWORD` and `JWT_SECRET` to generated secrets, set `APP_BASE_URL` and `NEXT_PUBLIC_API_URL` to the public HTTPS dashboard and API URLs, and set `WEB_ORIGINS` to the exact dashboard origin (scheme, host, and port). Configure authenticated SMTP with TLS and a verified sender address; public account verification and invitation delivery depend on it. Keep `.env` out of source control and use the deployment platform's secret store.
+
+Place a TLS reverse proxy in front of the web and API services. The PostgreSQL port is not published to the host; preserve that setting in deployment. Configure the proxy to forward requests to the web and API, restrict access to API documentation if needed, and replace `X-Forwarded-For` rather than appending untrusted client input. Only then set `RATE_LIMIT_TRUST_PROXY=true`; otherwise the API applies rate limits to its direct peer address. The built dashboard embeds `NEXT_PUBLIC_API_URL`, so rebuild the web image when that URL changes.
+
+The API exposes `/health` for liveness and `/ready` for readiness (including a database query). Back up the PostgreSQL volume before upgrades and test restoring a backup. Alembic migrations run at API startup; take care when deploying multiple API replicas at once so only one release process applies migrations at a time. The rate limiter uses PostgreSQL fixed-minute buckets and prunes expired buckets on auth requests.
 
 ## Stack and layout
 
@@ -71,4 +79,4 @@ The ignored `.env` file holds local secrets; `.env.example` contains placeholder
 
 ## Next milestones
 
-1. Complete production deployment configuration, account email verification, and rate limiting.
+1. Select a hosting provider, configure domain/TLS and production secrets, and exercise the production deployment and database restore procedure.

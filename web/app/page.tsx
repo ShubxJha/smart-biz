@@ -66,6 +66,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [inviteError, setInviteError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [verificationUrl, setVerificationUrl] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -78,9 +80,15 @@ export default function Home() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const invitationToken = url.searchParams.get("token") || new URLSearchParams(url.hash.slice(1)).get("token");
+    const emailToken = url.searchParams.get("verify") || new URLSearchParams(url.hash.slice(1)).get("verify");
     if (invitationToken) {
       setInviteToken(invitationToken);
       window.history.replaceState({}, "", url.pathname);
+    } else if (emailToken) {
+      window.history.replaceState({}, "", url.pathname);
+      void fetch(`${API}/api/v1/auth/verify-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: emailToken }) })
+        .then(async (response) => { if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || "This verification link is invalid or expired."); } setNotice("Email verified. You can now sign in."); setMode("login"); })
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "Email verification failed."));
     }
     const saved = sessionStorage.getItem("smartbiz-auth");
     if (saved) { try { const next = JSON.parse(saved) as Auth; setAuth(next); setSelectedId(next.memberships[0]?.business.id ?? null); } catch { sessionStorage.removeItem("smartbiz-auth"); } }
@@ -154,7 +162,7 @@ export default function Home() {
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault(); setBusy(true); setError(""); setNotice(""); setVerificationUrl("");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
     const payload = mode === "register"
       ? { email: values.email, password: values.password, full_name: values.full_name, business_name: inviteToken ? undefined : values.business_name }
@@ -162,7 +170,17 @@ export default function Home() {
     try {
       const response = await fetch(`${API}/api/v1/auth/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail || "Unable to sign in.");
+      if (mode === "register" && response.ok) {
+        setNotice(result.message || "Check your email to verify your account before signing in.");
+        setVerificationUrl(result.verification_url || "");
+        setMode("login");
+        return;
+      }
+      if (!response.ok) {
+        const detail = typeof result.detail === "string" ? result.detail : result.detail?.message || "Unable to sign in.";
+        if (result.detail?.verification_url) setVerificationUrl(result.detail.verification_url);
+        throw new Error(detail);
+      }
       const next = result as Auth; sessionStorage.setItem("smartbiz-auth", JSON.stringify(next)); setAuth(next); setSelectedId(next.memberships[0]?.business.id ?? null);
       const day = todayInZone(next.memberships[0]?.business.timezone); setEnd(day); setStart(earlier(day, 29));
       if (!next.memberships.length && !inviteToken) setError("Account created. Ask a business owner for an invitation, then sign in again.");
@@ -192,7 +210,7 @@ export default function Home() {
       {mode === "register" && <label>Full name<input name="full_name" autoComplete="name" placeholder="Your name" required minLength={1}/></label>}
       {mode === "register" && !inviteToken && <label>Business name<input name="business_name" placeholder="e.g. The Corner Store" required minLength={1}/></label>}
       <label>Email address<input name="email" type="email" autoComplete="email" placeholder="you@company.com" required/></label><label>Password<input name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="At least 8 characters" required minLength={mode === "login" ? 1 : 8}/></label>
-      {error && <div className="error-message" role="alert">{error}</div>}<button className="primary-button auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button><p className="auth-switch">{mode === "login" ? "New to SmartBiz?" : "Already have an account?"} <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Create an account" : "Sign in"}</button></p><p className="secure-note"><span>●</span> Your business data is private and secure</p></form></section></main>;
+      {notice && <div className="invite-banner" role="status"><strong>{notice}</strong>{verificationUrl && <a href={verificationUrl}>Open verification link</a>}</div>}{error && <div className="error-message" role="alert">{error}{verificationUrl && <> <a href={verificationUrl}>Open verification link</a></>}</div>}<button className="primary-button auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button><p className="auth-switch">{mode === "login" ? "New to SmartBiz?" : "Already have an account?"} <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setNotice(""); }}>{mode === "login" ? "Create an account" : "Sign in"}</button></p><p className="secure-note"><span>●</span> Your business data is private and secure</p></form></section></main>;
 
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div><div className="workspace-switch"><span className="workspace-avatar">{initials(business?.name || "SB")}</span><span className="workspace-copy"><strong>{business?.name || "Choose a business"}</strong><small>{business ? `${business.currency} · ${business.timezone}` : "No workspace assigned"}</small></span><select aria-label="Select business" value={selectedId ?? ""} onChange={(event) => setSelectedId(Number(event.target.value))}>{auth.memberships.map((item) => <option key={item.business.id} value={item.business.id}>{item.business.name}</option>)}</select><span className="chevron">⌄</span></div>
     <nav className="side-nav"><span className="nav-caption">WORKSPACE</span><a className="nav-item active" href="#overview"><Icon name="grid"/>Overview</a><a className="nav-item" href="#sales"><Icon name="bag"/>Sales</a><a className="nav-item" href="#products"><Icon name="box"/>Products</a><a className="nav-item" href="#customers"><Icon name="people"/>Customers</a><span className="nav-caption nav-spaced">INSIGHTS</span><a className="nav-item" href="#overview"><Icon name="chart"/>Analytics</a></nav>

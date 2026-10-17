@@ -60,6 +60,16 @@ class AuthOut(BaseModel):
     memberships: list[MembershipOut]
 
 
+class RegistrationOut(BaseModel):
+    message: str
+    delivery_status: Literal["sent", "manual", "failed"]
+    verification_url: str | None = None
+
+
+class EmailVerificationRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
+
+
 class AccountOut(BaseModel):
     user: UserOut
     memberships: list[MembershipOut]
