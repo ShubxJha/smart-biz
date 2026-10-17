@@ -64,6 +64,8 @@ export default function Home() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
+  const [inviteError, setInviteError] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -74,9 +76,46 @@ export default function Home() {
   const [interval, setInterval] = useState("day");
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const invitationToken = url.searchParams.get("token") || new URLSearchParams(url.hash.slice(1)).get("token");
+    if (invitationToken) {
+      setInviteToken(invitationToken);
+      window.history.replaceState({}, "", url.pathname);
+    }
     const saved = sessionStorage.getItem("smartbiz-auth");
     if (saved) { try { const next = JSON.parse(saved) as Auth; setAuth(next); setSelectedId(next.memberships[0]?.business.id ?? null); } catch { sessionStorage.removeItem("smartbiz-auth"); } }
   }, []);
+
+  useEffect(() => {
+    if (!auth || !inviteToken) return;
+    let cancelled = false;
+    async function acceptInvitation() {
+      setInviteError("");
+      try {
+        const response = await fetch(`${API}/api/v1/auth/invitations/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth!.access_token}` },
+          body: JSON.stringify({ token: inviteToken }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Unable to accept this invitation.");
+        if (cancelled) return;
+        const membership = result as Membership;
+        const next = { ...auth, memberships: [...auth.memberships.filter((item) => item.business.id !== membership.business.id), membership] };
+        sessionStorage.setItem("smartbiz-auth", JSON.stringify(next));
+        setAuth(next);
+        setSelectedId(membership.business.id);
+        setInviteToken("");
+        const day = todayInZone(membership.business.timezone);
+        setEnd(day);
+        setStart(earlier(day, 29));
+      } catch (cause) {
+        if (!cancelled) setInviteError(cause instanceof Error ? cause.message : "Unable to accept this invitation.");
+      }
+    }
+    void acceptInvitation();
+    return () => { cancelled = true; };
+  }, [auth, inviteToken]);
 
   const business = auth?.memberships.find((item) => item.business.id === selectedId)?.business;
   useEffect(() => {
@@ -118,7 +157,7 @@ export default function Home() {
     event.preventDefault(); setBusy(true); setError("");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
     const payload = mode === "register"
-      ? { email: values.email, password: values.password, full_name: values.full_name, business_name: values.business_name }
+      ? { email: values.email, password: values.password, full_name: values.full_name, business_name: inviteToken ? undefined : values.business_name }
       : { email: values.email, password: values.password };
     try {
       const response = await fetch(`${API}/api/v1/auth/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -126,7 +165,7 @@ export default function Home() {
       if (!response.ok) throw new Error(result.detail || "Unable to sign in.");
       const next = result as Auth; sessionStorage.setItem("smartbiz-auth", JSON.stringify(next)); setAuth(next); setSelectedId(next.memberships[0]?.business.id ?? null);
       const day = todayInZone(next.memberships[0]?.business.timezone); setEnd(day); setStart(earlier(day, 29));
-      if (!next.memberships.length) setError("Account created. Ask a business owner for an invitation, then sign in again.");
+      if (!next.memberships.length && !inviteToken) setError("Account created. Ask a business owner for an invitation, then sign in again.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to sign in."); }
     finally { setBusy(false); }
   }
@@ -149,9 +188,9 @@ export default function Home() {
   const dateRange = `${dateLabel(start || todayInZone(), { month: "short", day: "numeric" })} – ${dateLabel(end || todayInZone(), { month: "short", day: "numeric", year: "numeric" })}`;
 
   if (!auth) return <main className="auth-shell"><section className="auth-visual"><div className="brand brand-light"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div><div className="auth-copy"><span className="eyebrow">BUSINESS, IN FOCUS</span><h1>Know your numbers.<br/>Grow with confidence.</h1><p>One clear view of your sales, customers, and what’s working for your business.</p><div className="preview-card"><div className="preview-head"><span>Revenue overview</span><span className="preview-period">Last 30 days</span></div><div className="preview-number">₹ 2,48,560 <span>↗ 12.8%</span></div><div className="preview-bars">{[34, 48, 38, 57, 44, 66, 52, 76, 61, 89, 68, 100, 81, 92, 73, 100, 84, 96, 72, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }}/>)}</div></div></div><div className="auth-visual-footer">A simpler way to run your business.</div></section>
-    <section className="auth-panel"><form className="auth-form" onSubmit={submitAuth}><div className="mobile-brand brand"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div><span className="eyebrow">{mode === "login" ? "WELCOME BACK" : "GET STARTED"}</span><h2>{mode === "login" ? "Sign in to SmartBiz" : "Create your account"}</h2><p className="form-intro">{mode === "login" ? "Enter your details to access your dashboard." : "Set up your account and business workspace."}</p>
+    <section className="auth-panel"><form className="auth-form" onSubmit={submitAuth}><div className="mobile-brand brand"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div>{inviteToken && <div className="invite-banner"><strong>You’re invited to join a business</strong><span>Sign in with the invited email, or create an account to accept.</span></div>}<span className="eyebrow">{mode === "login" ? "WELCOME BACK" : "GET STARTED"}</span><h2>{mode === "login" ? "Sign in to SmartBiz" : inviteToken ? "Join your team" : "Create your account"}</h2><p className="form-intro">{mode === "login" ? "Enter your details to access your dashboard." : inviteToken ? "Use the same email address that received the invitation." : "Set up your account and business workspace."}</p>
       {mode === "register" && <label>Full name<input name="full_name" autoComplete="name" placeholder="Your name" required minLength={1}/></label>}
-      {mode === "register" && <label>Business name<input name="business_name" placeholder="e.g. The Corner Store" required minLength={1}/></label>}
+      {mode === "register" && !inviteToken && <label>Business name<input name="business_name" placeholder="e.g. The Corner Store" required minLength={1}/></label>}
       <label>Email address<input name="email" type="email" autoComplete="email" placeholder="you@company.com" required/></label><label>Password<input name="password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder="At least 8 characters" required minLength={mode === "login" ? 1 : 8}/></label>
       {error && <div className="error-message" role="alert">{error}</div>}<button className="primary-button auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button><p className="auth-switch">{mode === "login" ? "New to SmartBiz?" : "Already have an account?"} <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Create an account" : "Sign in"}</button></p><p className="secure-note"><span>●</span> Your business data is private and secure</p></form></section></main>;
 
@@ -161,6 +200,7 @@ export default function Home() {
   </aside><main className="main-content" id="overview"><header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div className="topbar-right"><span className="today-chip"><i/> All systems normal</span><button className="icon-button" title="Notifications" aria-label="Notifications"><Icon name="bell"/><i/></button><span className="top-avatar">{initials(auth.user.full_name)}</span></div></header>
     <div className="content-wrap"><div className="page-heading"><div><span className="eyebrow">YOUR BUSINESS AT A GLANCE</span><h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {auth.user.full_name.split(" ")[0]} <span className="wave">✦</span></h1><p>Here’s what’s happening with {business?.name || "your business"}.</p></div><div className="heading-actions"><button className="secondary-button" onClick={() => void downloadCsv()}><Icon name="download" size={16}/> Export report</button></div></div>
     <section className="filter-bar"><div className="filter-title"><span className="filter-icon"><Icon name="calendar" size={16}/></span><span><strong>Date range</strong><small>{dateRange}</small></span></div><div className="date-controls"><label><span>From</span><input type="date" value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></label><span className="date-separator">—</span><label><span>To</span><input type="date" value={end} min={start || undefined} max={todayInZone(business?.timezone)} onChange={(event) => setEnd(event.target.value)}/></label><button className="date-apply" onClick={() => void loadDashboard()} disabled={loading || !start || !end}>{loading ? "Loading…" : "Apply"}</button></div><button className="filter-export" onClick={() => void downloadCsv()} title="Export CSV"><Icon name="download" size={17}/></button></section>
+    {inviteError && <div className="inline-error" role="alert">{inviteError}<button onClick={() => void logout()}>Sign out to use another account</button></div>}
     {error && <div className="inline-error" role="alert">{error}<button onClick={() => void loadDashboard()}>Retry</button></div>}
     <section className="metric-grid" aria-label="Sales key metrics"><Metric title="Total revenue" value={summary ? money(summary.revenue_minor, summary.currency) : "—"} note={dateRange} icon="chart" tone="green"/><Metric title="Total orders" value={summary?.order_count.toLocaleString("en-IN") ?? "—"} note="Orders in selected period" icon="bag" tone="blue"/><Metric title="Average order value" value={summary ? money(summary.average_order_value_minor, summary.currency) : "—"} note="Revenue per order" icon="arrow" tone="orange"/><Metric title="Products sold" value={products.reduce((total, item) => total + item.units_sold, 0).toLocaleString("en-IN")} note="Units across all orders" icon="box" tone="purple"/></section>
     <section className="dashboard-grid"><article className="panel trend-panel"><div className="panel-header"><div><h2>Sales overview</h2><p>Revenue over time for the selected period</p></div><div className="panel-actions"><span className="legend"><i/> Revenue</span><select className="interval-select" value={interval} onChange={(event) => setInterval(event.target.value)} aria-label="Chart interval"><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select></div></div><SalesChart data={trend} currency={summary?.currency || business?.currency || "INR"}/></article>

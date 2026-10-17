@@ -1,5 +1,6 @@
 import hashlib
 import csv
+import logging
 import os
 from io import StringIO
 import secrets
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app import models, schemas
+from app.emailing import EmailDeliveryError, send_business_invitation
 from app.auth import ACCESS_TOKEN_TTL, create_access_token, decode_access_token, get_business_membership, get_current_user, hash_password, verify_password
 
 app = FastAPI(
@@ -22,6 +24,7 @@ app = FastAPI(
     description="Sales management and business analytics for small businesses.",
     version="0.4.0",
 )
+logger = logging.getLogger(__name__)
 
 web_origins = [
     origin.strip()
@@ -296,13 +299,30 @@ def create_business_invitation(
     db.add(invitation)
     db.commit()
     db.refresh(invitation)
+    try:
+        email_sent = send_business_invitation(
+            recipient=email,
+            business_name=membership.business.name,
+            role=payload.role,
+            token=token,
+            expires_at=invitation.expires_at.isoformat(),
+        )
+    except EmailDeliveryError as exc:
+        logger.warning("Invitation email delivery failed for invitation %s: %s", invitation.id, exc)
+        delivery_status = "failed"
+        response_token = token
+    else:
+        delivery_status = "sent" if email_sent else "manual"
+        response_token = None if email_sent else token
     return {
         "id": invitation.id,
         "business_id": invitation.business_id,
         "email": invitation.email,
         "role": invitation.role,
-        "token": token,
+        "token": response_token,
+        "invitation_url": f"{os.getenv('APP_BASE_URL', 'http://localhost:3000').rstrip('/')}/#token={token}" if response_token else None,
         "expires_at": invitation.expires_at,
+        "delivery_status": delivery_status,
     }
 
 

@@ -1,0 +1,15 @@
+.invite-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 22px;
+  padding: 11px 12px;
+  border: 1px solid #d9ebdf;
+  border-radius: 7px;
+  background: #edf7f0;
+  color: #286744;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.invite-banner strong { font-size: 11px; }

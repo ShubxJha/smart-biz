@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -84,8 +85,10 @@ class InvitationCreated(BaseModel):
     business_id: int
     email: str
     role: str
-    token: str
+    token: str | None = None
+    invitation_url: str | None = None
     expires_at: datetime
+    delivery_status: Literal["sent", "manual", "failed"]
 
 
 class InvitationOut(BaseModel):
