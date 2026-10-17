@@ -1,6 +1,6 @@
 # SmartBiz
 
-SmartBiz is a sales management and business analytics platform for small businesses. The API now supports accounts, business memberships, customer and product records, stock-aware sales capture, and a dashboard summary. A Next.js dashboard and Flutter companion app are planned client applications.
+SmartBiz is a sales management and business analytics platform for small businesses. The API supports accounts, business memberships, customer and product records, stock-aware sales capture, and business-local analytics. The Next.js dashboard connects these workflows in a browser; the Flutter companion app is planned.
 
 ## Run locally
 
@@ -12,11 +12,13 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-The API is available at `http://localhost:8000`; interactive API docs are at `http://localhost:8000/docs`. Alembic applies database migrations when the API starts. `GET /health` reports API liveness.
+The dashboard is available at `http://localhost:3000`. The API is available at `http://localhost:8000`; interactive API docs are at `http://localhost:8000/docs`. Alembic applies database migrations when the API starts. `GET /health` reports API liveness.
 
 ## Register and call the API
 
 Registration creates an account, a business, and an owner membership. Passwords are hashed with Argon2; login returns a signed bearer access token that expires after 30 minutes.
+
+You can also create an account from the dashboard at `http://localhost:3000`. Sign in to view sales metrics, revenue trends, top products, recent orders, and download a CSV report. The dashboard stores its access token only for the current browser tab session. To run the web app outside Docker, use Node.js 22 or newer from `web/` with `npm install` followed by `npm run dev`; configure `NEXT_PUBLIC_API_URL` when the API is hosted somewhere other than `http://localhost:8000`. Set `WEB_ORIGINS` on the API to the dashboard's exact origin when using a different local address.
 
 ```powershell
 $auth = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/auth/register -ContentType 'application/json' -Body '{"email":"owner@example.com","full_name":"Sample Owner","password":"<YOUR_UNIQUE_PASSWORD>","business_name":"Sample Shop"}'
@@ -60,13 +62,13 @@ The ignored `.env` file holds local secrets; `.env.example` contains placeholder
 
 - API: Python 3.12, FastAPI, SQLAlchemy, Alembic, PyJWT, pwdlib/Argon2
 - Database: PostgreSQL 16
-- Web: Next.js and TypeScript (planned)
+- Web: Next.js and TypeScript
 - Mobile: Flutter and Dart (planned)
 - `backend/`: API and database migrations
+- `web/`: browser dashboard
 - `docs/`: architecture decisions
 
 ## Next milestones
 
-1. Build the web dashboard and connect it to the API.
-2. Build Flutter sales capture and inventory views against the same API.
-3. Add email delivery for business invitations and complete deployment configuration.
+1. Build Flutter sales capture and inventory views against the same API.
+2. Add email delivery for business invitations and complete deployment configuration.

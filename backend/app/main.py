@@ -1,5 +1,6 @@
 import hashlib
 import csv
+import os
 from io import StringIO
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
@@ -7,6 +8,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -19,6 +21,15 @@ app = FastAPI(
     title="SmartBiz API",
     description="Sales management and business analytics for small businesses.",
     version="0.4.0",
+)
+
+web_origins = [origin.strip() for origin in os.getenv("WEB_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=web_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Business-Id"],
 )
 
 
