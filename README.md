@@ -63,12 +63,12 @@ The ignored `.env` file holds local secrets; `.env.example` contains placeholder
 - API: Python 3.12, FastAPI, SQLAlchemy, Alembic, PyJWT, pwdlib/Argon2
 - Database: PostgreSQL 16
 - Web: Next.js and TypeScript
-- Mobile: Flutter and Dart (planned)
+- Mobile: Flutter and Dart
 - `backend/`: API and database migrations
 - `web/`: browser dashboard
+- `mobile/`: Android and iOS sales and inventory app
 - `docs/`: architecture decisions
 
 ## Next milestones
 
-1. Build Flutter sales capture and inventory views against the same API.
-2. Add email delivery for business invitations and complete deployment configuration.
+1. Add email delivery for business invitations and complete deployment configuration.

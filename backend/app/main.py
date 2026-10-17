@@ -23,7 +23,11 @@ app = FastAPI(
     version="0.4.0",
 )
 
-web_origins = [origin.strip() for origin in os.getenv("WEB_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
+web_origins = [
+    origin.strip()
+    for origin in os.getenv("WEB_ORIGINS", "http://localhost:3000,http://localhost:5000").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=web_origins,

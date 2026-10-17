@@ -2,7 +2,7 @@
 
 ## Application shape
 
-SmartBiz is a modular monolith for its first release. The web dashboard and Flutter client call one versioned REST API. The API owns validation, access control, reporting queries, and database writes. PostgreSQL is the source of truth.
+SmartBiz is a modular monolith for its first release. The web dashboard and Flutter client call one versioned REST API. The API owns validation, access control, reporting queries, and database writes. PostgreSQL is the source of truth. Native clients send a bearer token and the selected `X-Business-Id` on business-scoped requests.
 
 ## Identity and tenancy
 
