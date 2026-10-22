@@ -96,20 +96,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!auth || !inviteToken) return;
+    const currentAuth: Auth = auth;
     let cancelled = false;
     async function acceptInvitation() {
       setInviteError("");
       try {
         const response = await fetch(`${API}/api/v1/auth/invitations/accept`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${auth!.access_token}` },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentAuth.access_token}` },
           body: JSON.stringify({ token: inviteToken }),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.detail || "Unable to accept this invitation.");
         if (cancelled) return;
         const membership = result as Membership;
-        const next = { ...auth, memberships: [...auth.memberships.filter((item) => item.business.id !== membership.business.id), membership] };
+        const next = { ...currentAuth, memberships: [...currentAuth.memberships.filter((item) => item.business.id !== membership.business.id), membership] };
         sessionStorage.setItem("smartbiz-auth", JSON.stringify(next));
         setAuth(next);
         setSelectedId(membership.business.id);
