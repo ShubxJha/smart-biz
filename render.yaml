@@ -2,6 +2,7 @@ services:
   - type: web
     name: smartbiz-api
     runtime: docker
+    plan: free
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
@@ -39,6 +40,7 @@ services:
   - type: web
     name: smartbiz-web
     runtime: docker
+    plan: free
     region: singapore
     dockerfilePath: ./web/Dockerfile
     dockerContext: ./web
@@ -52,6 +54,7 @@ services:
 
 databases:
   - name: smartbiz-db
+    plan: free
     databaseName: smartbiz
     user: smartbiz
     region: singapore
