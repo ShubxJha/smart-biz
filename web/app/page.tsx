@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import DataEntryModal, { type EntryKind } from "./data-entry";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type Business = { id: number; name: string; currency: string; timezone: string };
@@ -68,6 +69,8 @@ export default function Home() {
   const [inviteError, setInviteError] = useState("");
   const [notice, setNotice] = useState("");
   const [verificationUrl, setVerificationUrl] = useState("");
+  const [entryKind, setEntryKind] = useState<EntryKind | null>(null);
+  const [actionNotice, setActionNotice] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -205,6 +208,20 @@ export default function Home() {
 
   const maxProductRevenue = useMemo(() => Math.max(1, ...products.map((product) => product.revenue_minor)), [products]);
   const dateRange = `${dateLabel(start || todayInZone(), { month: "short", day: "numeric" })} – ${dateLabel(end || todayInZone(), { month: "short", day: "numeric", year: "numeric" })}`;
+  const selectedRole = auth?.memberships.find((item) => item.business.id === selectedId)?.role;
+  const canManageProducts = selectedRole === "owner" || selectedRole === "admin";
+  const canRecordSales = canManageProducts || selectedRole === "sales";
+
+  function entrySaved(kind: EntryKind) {
+    const messages: Record<EntryKind, string> = {
+      product: "Product added to your inventory.",
+      customer: "Customer added to your records.",
+      sale: "Sale recorded and inventory updated.",
+    };
+    setEntryKind(null);
+    setActionNotice(messages[kind]);
+    if (kind === "sale") void loadDashboard();
+  }
 
   if (!auth) return <main className="auth-shell"><section className="auth-visual"><div className="brand brand-light"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div><div className="auth-copy"><span className="eyebrow">BUSINESS, IN FOCUS</span><h1>Know your numbers.<br/>Grow with confidence.</h1><p>One clear view of your sales, customers, and what’s working for your business.</p><div className="preview-card"><div className="preview-head"><span>Revenue overview</span><span className="preview-period">Last 30 days</span></div><div className="preview-number">₹ 2,48,560 <span>↗ 12.8%</span></div><div className="preview-bars">{[34, 48, 38, 57, 44, 66, 52, 76, 61, 89, 68, 100, 81, 92, 73, 100, 84, 96, 72, 87].map((height, index) => <i key={index} style={{ height: `${height}%` }}/>)}</div></div></div><div className="auth-visual-footer">A simpler way to run your business.</div></section>
     <section className="auth-panel"><form className="auth-form" onSubmit={submitAuth}><div className="mobile-brand brand"><span className="brand-mark"><Icon name="grid" size={19}/></span><span>smart<span className="brand-accent">biz</span></span></div>{inviteToken && <div className="invite-banner"><strong>You’re invited to join a business</strong><span>Sign in with the invited email, or create an account to accept.</span></div>}<span className="eyebrow">{mode === "login" ? "WELCOME BACK" : "GET STARTED"}</span><h2>{mode === "login" ? "Sign in to SmartBiz" : inviteToken ? "Join your team" : "Create your account"}</h2><p className="form-intro">{mode === "login" ? "Enter your details to access your dashboard." : inviteToken ? "Use the same email address that received the invitation." : "Set up your account and business workspace."}</p>
@@ -217,8 +234,14 @@ export default function Home() {
     <nav className="side-nav"><span className="nav-caption">WORKSPACE</span><a className="nav-item active" href="#overview"><Icon name="grid"/>Overview</a><a className="nav-item" href="#sales"><Icon name="bag"/>Sales</a><a className="nav-item" href="#products"><Icon name="box"/>Products</a><a className="nav-item" href="#customers"><Icon name="people"/>Customers</a><span className="nav-caption nav-spaced">INSIGHTS</span><a className="nav-item" href="#overview"><Icon name="chart"/>Analytics</a></nav>
     <div className="sidebar-bottom"><div className="sidebar-help"><span className="help-icon">?</span><div><strong>Need a hand?</strong><small>Visit the help center</small></div><span className="help-arrow">↗</span></div><button className="profile-row" onClick={() => void logout()}><span className="profile-avatar">{initials(auth.user.full_name)}</span><span className="profile-copy"><strong>{auth.user.full_name}</strong><small>{auth.user.email}</small></span><span className="profile-menu">⋯</span></button></div>
   </aside><main className="main-content" id="overview"><header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div className="topbar-right"><span className="today-chip"><i/> All systems normal</span><button className="icon-button" title="Notifications" aria-label="Notifications"><Icon name="bell"/><i/></button><span className="top-avatar">{initials(auth.user.full_name)}</span></div></header>
-    <div className="content-wrap"><div className="page-heading"><div><span className="eyebrow">YOUR BUSINESS AT A GLANCE</span><h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {auth.user.full_name.split(" ")[0]} <span className="wave">✦</span></h1><p>Here’s what’s happening with {business?.name || "your business"}.</p></div><div className="heading-actions"><button className="secondary-button" onClick={() => void downloadCsv()}><Icon name="download" size={16}/> Export report</button></div></div>
+    <div className="content-wrap"><div className="page-heading"><div><span className="eyebrow">YOUR BUSINESS AT A GLANCE</span><h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {auth.user.full_name.split(" ")[0]} <span className="wave">✦</span></h1><p>Here’s what’s happening with {business?.name || "your business"}.</p></div><div className="heading-actions entry-actions">
+      {canManageProducts && <button className="secondary-button" type="button" onClick={() => { setActionNotice(""); setEntryKind("product"); }}><Icon name="box" size={15}/> Add product</button>}
+      {canRecordSales && <button className="secondary-button" type="button" onClick={() => { setActionNotice(""); setEntryKind("customer"); }}><Icon name="people" size={15}/> Add customer</button>}
+      {canRecordSales && <button className="primary-button entry-sale-button" type="button" onClick={() => { setActionNotice(""); setEntryKind("sale"); }}><Icon name="bag" size={15}/> Record sale</button>}
+      <button className="secondary-button" type="button" onClick={() => void downloadCsv()}><Icon name="download" size={15}/> Export report</button>
+    </div></div>
     <section className="filter-bar"><div className="filter-title"><span className="filter-icon"><Icon name="calendar" size={16}/></span><span><strong>Date range</strong><small>{dateRange}</small></span></div><div className="date-controls"><label><span>From</span><input type="date" value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></label><span className="date-separator">—</span><label><span>To</span><input type="date" value={end} min={start || undefined} max={todayInZone(business?.timezone)} onChange={(event) => setEnd(event.target.value)}/></label><button className="date-apply" onClick={() => void loadDashboard()} disabled={loading || !start || !end}>{loading ? "Loading…" : "Apply"}</button></div><button className="filter-export" onClick={() => void downloadCsv()} title="Export CSV"><Icon name="download" size={17}/></button></section>
+    {actionNotice && <div className="entry-success" role="status">{actionNotice}<button type="button" onClick={() => setActionNotice("")} aria-label="Dismiss">×</button></div>}
     {inviteError && <div className="inline-error" role="alert">{inviteError}<button onClick={() => void logout()}>Sign out to use another account</button></div>}
     {error && <div className="inline-error" role="alert">{error}<button onClick={() => void loadDashboard()}>Retry</button></div>}
     <section className="metric-grid" aria-label="Sales key metrics"><Metric title="Total revenue" value={summary ? money(summary.revenue_minor, summary.currency) : "—"} note={dateRange} icon="chart" tone="green"/><Metric title="Total orders" value={summary?.order_count.toLocaleString("en-IN") ?? "—"} note="Orders in selected period" icon="bag" tone="blue"/><Metric title="Average order value" value={summary ? money(summary.average_order_value_minor, summary.currency) : "—"} note="Revenue per order" icon="arrow" tone="orange"/><Metric title="Products sold" value={products.reduce((total, item) => total + item.units_sold, 0).toLocaleString("en-IN")} note="Units across all orders" icon="box" tone="purple"/></section>
@@ -226,7 +249,7 @@ export default function Home() {
     <article className="panel products-panel" id="products"><div className="panel-header"><div><h2>Top products</h2><p>Best performers by revenue</p></div><a className="text-link" href="#products">View all <span>→</span></a></div><div className="product-list">{products.slice(0, 5).map((product, index) => <div className="product-row" key={product.product_name}><span className={`product-thumb p-${index % 5}`}><Icon name="box" size={19}/></span><span className="product-data"><strong>{product.product_name}</strong><small>{product.units_sold} units sold</small><span className="product-track"><i style={{ width: `${Math.max(7, product.revenue_minor / maxProductRevenue * 100)}%` }}/></span></span><strong className="product-revenue">{money(product.revenue_minor, summary?.currency || business?.currency || "INR")}</strong></div>)}{!products.length && <Empty text="No product sales in this period"/>}</div></article></section>
     <section className="panel recent-panel" id="sales"><div className="panel-header"><div><h2>Recent sales</h2><p>Your latest orders in this date range</p></div><a className="text-link" href="#sales">All sales <span>→</span></a></div><div className="table-scroll"><table><thead><tr><th>ORDER</th><th>ITEMS</th><th>DATE &amp; TIME</th><th>STATUS</th><th className="amount-col">AMOUNT</th></tr></thead><tbody>{sales.map((sale) => <tr key={sale.id}><td><strong className="order-id">#{String(sale.id).padStart(5, "0")}</strong></td><td><span className="sale-items">{sale.items.slice(0, 2).map((item) => item.product_name).join(", ")}{sale.items.length > 2 ? ` +${sale.items.length - 2} more` : ""}</span></td><td><span className="sale-time"><Icon name="clock" size={14}/>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: business?.timezone }).format(new Date(sale.created_at))}</span></td><td><span className="status-pill"><i/>Completed</span></td><td className="amount-col"><strong>{money(sale.total_minor, sale.currency)}</strong></td></tr>)}</tbody></table>{!sales.length && <Empty text="No sales found in this period"/>}</div></section>
     <footer className="page-footer"><span>© 2026 SmartBiz</span><span>Showing {dateRange} · Timezone: {business?.timezone || "—"}</span><a href={`${API}/docs`} target="_blank" rel="noreferrer">API documentation ↗</a></footer></div>
-  </main></div>;
+  </main>{entryKind && <DataEntryModal kind={entryKind} currency={business?.currency || "INR"} request={request} onClose={() => setEntryKind(null)} onSaved={entrySaved}/>}</div>;
 }
 
 function Metric({ title, value, note, icon, tone }: { title: string; value: string; note: string; icon: string; tone: string }) {
