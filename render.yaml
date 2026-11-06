@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: smartbiz-api
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /ready
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartbiz-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # Enter the SmartBiz web service URL, e.g. https://smartbiz-web.onrender.com.
+      - key: APP_BASE_URL
+        sync: false
+      # Enter the exact web origin (scheme and host only).
+      - key: WEB_ORIGINS
+        sync: false
+      - key: RATE_LIMIT_TRUST_PROXY
+        value: "true"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_TLS_MODE
+        value: starttls
+
+  - type: web
+    name: smartbiz-web
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./web/Dockerfile
+    dockerContext: ./web
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "10000"
+      # Enter the public API URL, e.g. https://smartbiz-api.onrender.com.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+databases:
+  - name: smartbiz-db
+    databaseName: smartbiz
+    user: smartbiz
+    region: singapore
+    postgresMajorVersion: "16"
+    ipAllowList: []

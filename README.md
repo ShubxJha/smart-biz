@@ -58,13 +58,15 @@ Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/lo
 
 The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment. Access tokens expire after 30 minutes; logout revokes the current token, while refresh-token rotation is not implemented yet.
 
-## Deployment
+## Deployment on Render
 
-Docker Compose is the reference deployment. Before public launch, set `DB_PASSWORD` and `JWT_SECRET` to generated secrets, set `APP_BASE_URL` and `NEXT_PUBLIC_API_URL` to the public HTTPS dashboard and API URLs, and set `WEB_ORIGINS` to the exact dashboard origin (scheme, host, and port). Configure authenticated SMTP with TLS and a verified sender address; public account verification and invitation delivery depend on it. Keep `.env` out of source control and use the deployment platform's secret store.
+`render.yaml` defines the SmartBiz API, dashboard, and managed PostgreSQL database in Singapore. It uses the existing Dockerfiles, connects the API through Render's private database URL, creates a random JWT secret, limits public database access, and configures readiness checks. The API accepts Render's `PORT` and runs Alembic migrations on startup.
 
-Place a TLS reverse proxy in front of the web and API services. The PostgreSQL port is not published to the host; preserve that setting in deployment. Configure the proxy to forward requests to the web and API, restrict access to API documentation if needed, and replace `X-Forwarded-For` rather than appending untrusted client input. Only then set `RATE_LIMIT_TRUST_PROXY=true`; otherwise the API applies rate limits to its direct peer address. The built dashboard embeds `NEXT_PUBLIC_API_URL`, so rebuild the web image when that URL changes.
+To deploy, connect the private GitHub repository to Render and create a Blueprint from `render.yaml`. Review the service and database plans before applying them. During Blueprint setup, provide `APP_BASE_URL` and `WEB_ORIGINS` as the dashboard's exact HTTPS origin, `NEXT_PUBLIC_API_URL` as the API's HTTPS URL, and your SMTP host, username, password, and verified sender address. The service names suggest `https://smartbiz-web.onrender.com` and `https://smartbiz-api.onrender.com`; use the URLs Render actually assigns. Keep credentials in Render's environment settings, not in this repository. Public signup and invitation emails require working SMTP.
 
-The API exposes `/health` for liveness and `/ready` for readiness (including a database query). Back up the PostgreSQL volume before upgrades and test restoring a backup. Alembic migrations run at API startup; take care when deploying multiple API replicas at once so only one release process applies migrations at a time. The rate limiter uses PostgreSQL fixed-minute buckets and prunes expired buckets on auth requests.
+After the first deploy, open the dashboard URL and verify registration, email confirmation, product/customer entry, sale recording, and stock updates. The API readiness endpoint is `/ready`; API docs are at `/docs`. If you later add a custom domain, update `APP_BASE_URL`, `WEB_ORIGINS`, and `NEXT_PUBLIC_API_URL` to match it, then rebuild the dashboard. Render Postgres public access is disabled in the Blueprint; add an IP allow rule only if you need to connect from a desktop database client.
+
+For local development, use Docker Compose as described above. Its PostgreSQL port is not published by default; use `docker-compose.local.yml` when a desktop PostgreSQL client needs localhost access. The rate limiter uses PostgreSQL fixed-minute buckets and prunes expired buckets on auth requests.
 
 ## Stack and layout
 
@@ -79,4 +81,4 @@ The API exposes `/health` for liveness and `/ready` for readiness (including a d
 
 ## Next milestones
 
-1. Select a hosting provider, configure domain/TLS and production secrets, and exercise the production deployment and database restore procedure.
+1. Apply the Render Blueprint, verify production workflows and email delivery, then configure a custom domain and confirm database backup and restore procedures.

@@ -81,7 +81,7 @@ def enforce_auth_rate_limit(request: Request, db: Session, action: str, identity
     window = now.replace(second=0, microsecond=0)
     client_ip = request.client.host if request.client else "unknown"
     if os.getenv("RATE_LIMIT_TRUST_PROXY", "false").strip().lower() == "true":
-        forwarded_for = request.headers.get("x-forwarded-for", "")
+        forwarded_for = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "")
         if forwarded_for.strip():
             client_ip = forwarded_for.split(",", 1)[0].strip()
     identities = {f"{action}:ip:{client_ip}", f"{action}:identity:{identity}"}
