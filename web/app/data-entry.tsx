@@ -13,6 +13,7 @@ type Props = {
   kind: EntryKind;
   currency: string;
   request: Requester;
+  startInImport?: boolean;
   onClose: () => void;
   onSaved: (kind: EntryKind, importedCount?: number) => void;
 };
@@ -23,7 +24,7 @@ const TITLES: Record<EntryKind, string> = {
   sale: "Record a sale",
 };
 
-export default function DataEntryModal({ kind, currency, request, onClose, onSaved }: Props) {
+export default function DataEntryModal({ kind, currency, request, startInImport = false, onClose, onSaved }: Props) {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(kind !== "sale");
@@ -32,7 +33,7 @@ export default function DataEntryModal({ kind, currency, request, onClose, onSav
   const [lines, setLines] = useState<SaleLine[]>([{ id: 1, product_id: "", quantity: "1" }]);
   const [nextLineId, setNextLineId] = useState(2);
   const [customerId, setCustomerId] = useState("");
-  const [importMode, setImportMode] = useState(false);
+  const [importMode, setImportMode] = useState(startInImport);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {

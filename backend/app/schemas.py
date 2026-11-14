@@ -122,6 +122,33 @@ class CustomerCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=32)
 
 
+class CustomerUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    email: str | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=32)
+
+    @field_validator("name", "email", "phone", mode="before")
+    @classmethod
+    def strip_update_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("name")
+    @classmethod
+    def update_name_not_blank(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            raise ValueError("name cannot be blank")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def update_email_valid(cls, value: str | None) -> str | None:
+        if value == "":
+            return None
+        if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("email must be a valid email address")
+        return value.lower() if value else value
+
+
 class CustomerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -185,6 +212,33 @@ class ProductCreate(BaseModel):
     stock_quantity: int = Field(default=0, ge=0)
 
 
+class ProductUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    sku: str | None = Field(default=None, min_length=1, max_length=64)
+    price_minor: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    stock_quantity: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    active: bool | None = None
+
+    @field_validator("name", "sku", mode="before")
+    @classmethod
+    def strip_product_update_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("name", "sku")
+    @classmethod
+    def product_update_text_not_blank(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            raise ValueError("value cannot be blank")
+        return value
+
+    @field_validator("active")
+    @classmethod
+    def product_active_not_null(cls, value: bool | None) -> bool:
+        if value is None:
+            raise ValueError("active must be true or false")
+        return value
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -240,6 +294,17 @@ class SaleImportRequest(BaseModel):
     rows: list[SaleImportItem] = Field(min_length=1, max_length=500)
 
 
+class SaleCorrectionItem(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=2_147_483_647)
+    unit_price_minor: int = Field(ge=0, le=2_147_483_647)
+
+
+class SaleCorrection(BaseModel):
+    customer_id: int | None = None
+    items: list[SaleCorrectionItem] = Field(min_length=1, max_length=100)
+
+
 class SaleItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -256,5 +321,6 @@ class SaleOut(BaseModel):
     customer_id: int | None
     total_minor: int
     currency: str
+    external_reference: str | None = None
     created_at: datetime
     items: list[SaleItemOut]

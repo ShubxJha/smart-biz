@@ -36,7 +36,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=web_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-Business-Id"],
 )
 
@@ -501,6 +501,35 @@ def list_customers(business: models.Business = Depends(require_business), db: Se
     return db.scalars(select(models.Customer).where(models.Customer.business_id == business.id).order_by(models.Customer.name)).all()
 
 
+@app.patch("/api/v1/customers/{customer_id:int}", response_model=schemas.CustomerOut, tags=["customers"])
+def update_customer(customer_id: int, payload: schemas.CustomerUpdate, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status_code=400, detail="Provide at least one customer field to update")
+    customer = db.scalar(select(models.Customer).where(models.Customer.id == customer_id, models.Customer.business_id == business.id))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    for key, value in values.items():
+        setattr(customer, key, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A customer with this email already exists") from None
+    db.refresh(customer)
+    return customer
+
+
+@app.delete("/api/v1/customers/{customer_id:int}", status_code=204, tags=["customers"])
+def delete_customer(customer_id: int, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    customer = db.scalar(select(models.Customer).where(models.Customer.id == customer_id, models.Customer.business_id == business.id))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    db.delete(customer)
+    db.commit()
+    return Response(status_code=204)
+
+
 @app.post("/api/v1/customers/import", tags=["customers"])
 def import_customers(payload: schemas.CustomerImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin", "sales")), db: Session = Depends(get_db)):
     seen: set[str] = set()
@@ -546,6 +575,40 @@ def create_product(payload: schemas.ProductCreate, business: models.Business = D
 @app.get("/api/v1/products", response_model=list[schemas.ProductOut], tags=["products"])
 def list_products(business: models.Business = Depends(require_business), db: Session = Depends(get_db)):
     return db.scalars(select(models.Product).where(models.Product.business_id == business.id).order_by(models.Product.name)).all()
+
+
+@app.patch("/api/v1/products/{product_id:int}", response_model=schemas.ProductOut, tags=["products"])
+def update_product(product_id: int, payload: schemas.ProductUpdate, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status_code=400, detail="Provide at least one product field to update")
+    product = db.scalar(select(models.Product).where(models.Product.id == product_id, models.Product.business_id == business.id))
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    for key, value in values.items():
+        setattr(product, key, value)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A product with this SKU already exists") from None
+    db.refresh(product)
+    return product
+
+
+@app.delete("/api/v1/products/{product_id:int}", tags=["products"])
+def delete_product(product_id: int, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    product = db.scalar(select(models.Product).where(models.Product.id == product_id, models.Product.business_id == business.id))
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    has_sales = db.scalar(select(models.SaleItem.id).where(models.SaleItem.product_id == product.id).limit(1)) is not None
+    if has_sales:
+        product.active = False
+        db.commit()
+        return {"deleted": False, "deactivated": True}
+    db.delete(product)
+    db.commit()
+    return {"deleted": True, "deactivated": False}
 
 
 @app.post("/api/v1/products/import", tags=["products"])
@@ -726,6 +789,101 @@ def list_sales(
     if customer_id is not None:
         statement = statement.where(models.Sale.customer_id == customer_id)
     return db.scalars(statement).all()
+
+
+@app.patch("/api/v1/sales/{sale_id:int}", response_model=schemas.SaleOut, tags=["sales"])
+def update_sale(sale_id: int, payload: schemas.SaleCorrection, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    sale = db.scalar(
+        select(models.Sale)
+        .options(selectinload(models.Sale.items))
+        .where(models.Sale.id == sale_id, models.Sale.business_id == business.id)
+        .with_for_update()
+    )
+    if sale is None:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    if payload.customer_id is not None:
+        customer = db.scalar(select(models.Customer).where(
+            models.Customer.id == payload.customer_id,
+            models.Customer.business_id == business.id,
+        ))
+        if customer is None:
+            raise HTTPException(status_code=404, detail="Customer not found in this business")
+
+    previous_quantities: dict[int, int] = {}
+    for item in sale.items:
+        if item.product_id is not None:
+            previous_quantities[item.product_id] = previous_quantities.get(item.product_id, 0) + item.quantity
+    new_quantities: dict[int, int] = {}
+    for item in payload.items:
+        new_quantities[item.product_id] = new_quantities.get(item.product_id, 0) + item.quantity
+    product_ids = set(previous_quantities) | set(new_quantities)
+    linked_products = db.scalars(
+        select(models.Product)
+        .where(models.Product.business_id == business.id, models.Product.id.in_(product_ids))
+        .order_by(models.Product.id)
+        .with_for_update()
+    ).all() if product_ids else []
+    products_by_id = {product.id: product for product in linked_products}
+    if set(new_quantities) - products_by_id.keys():
+        raise HTTPException(status_code=404, detail="One or more products were not found in this business")
+
+    total_minor = sum(item.quantity * item.unit_price_minor for item in payload.items)
+    if total_minor > 2_147_483_647:
+        raise HTTPException(status_code=422, detail="Sale total exceeds the supported maximum")
+    is_historical_import = sale.external_reference is not None
+    if not is_historical_import:
+        for product_id in set(new_quantities) - previous_quantities.keys():
+            if not products_by_id[product_id].active:
+                raise HTTPException(status_code=409, detail=f"Product {products_by_id[product_id].name} is inactive")
+        for product_id, product in products_by_id.items():
+            available = product.stock_quantity + previous_quantities.get(product_id, 0)
+            requested = new_quantities.get(product_id, 0)
+            if requested > available:
+                raise HTTPException(status_code=409, detail=f"Insufficient stock for {product.name}")
+            product.stock_quantity = available - requested
+
+    sale.customer_id = payload.customer_id
+    sale.total_minor = total_minor
+    sale.items.clear()
+    for item in payload.items:
+        product = products_by_id[item.product_id]
+        sale.items.append(models.SaleItem(
+            product_id=product.id,
+            product_name=product.name,
+            quantity=item.quantity,
+            unit_price_minor=item.unit_price_minor,
+        ))
+    db.commit()
+    db.refresh(sale)
+    return sale
+
+
+@app.delete("/api/v1/sales/{sale_id:int}", status_code=204, tags=["sales"])
+def delete_sale(sale_id: int, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    sale = db.scalar(
+        select(models.Sale)
+        .options(selectinload(models.Sale.items))
+        .where(models.Sale.id == sale_id, models.Sale.business_id == business.id)
+        .with_for_update()
+    )
+    if sale is None:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    if sale.external_reference is None:
+        product_ids = {item.product_id for item in sale.items if item.product_id is not None}
+        if product_ids:
+            linked_products = db.scalars(
+                select(models.Product)
+                .where(models.Product.business_id == business.id, models.Product.id.in_(product_ids))
+                .with_for_update()
+            ).all()
+            products_by_id = {product.id: product for product in linked_products}
+            for item in sale.items:
+                product = products_by_id.get(item.product_id)
+                if product is not None:
+                    product.stock_quantity += item.quantity
+    db.delete(sale)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/api/v1/dashboard/summary", tags=["analytics"])
