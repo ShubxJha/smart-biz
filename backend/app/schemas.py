@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -128,6 +129,53 @@ class CustomerOut(BaseModel):
     name: str
     email: str | None
     phone: str | None
+
+
+class CustomerImportItem(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    email: str | None = Field(default=None, max_length=254)
+    phone: str | None = Field(default=None, max_length=32)
+
+    @field_validator("name", "email", "phone", mode="before")
+    @classmethod
+    def strip_optional_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        if not value:
+            raise ValueError("name cannot be blank")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        if value == "":
+            return None
+        if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("email must be a valid email address")
+        return value.lower() if value else value
+
+
+class CustomerImportRequest(BaseModel):
+    rows: list[CustomerImportItem] = Field(min_length=1, max_length=500)
+
+
+class ProductImportItem(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    sku: str = Field(min_length=1, max_length=64)
+    price_minor: int = Field(ge=0, le=2_147_483_647)
+    stock_quantity: int = Field(default=0, ge=0, le=2_147_483_647)
+
+    @field_validator("name", "sku", mode="before")
+    @classmethod
+    def strip_required_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class ProductImportRequest(BaseModel):
+    rows: list[ProductImportItem] = Field(min_length=1, max_length=500)
 
 
 class ProductCreate(BaseModel):

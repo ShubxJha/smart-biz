@@ -200,7 +200,7 @@ export default function Home() {
     headers.set("X-Business-Id", String(selectedId));
     const response = await fetch(`${API}${path}`, { ...init, headers });
     if (response.status === 401) { sessionStorage.removeItem("smartbiz-auth"); setAuth(null); throw new Error("Your session expired. Please sign in again."); }
-    if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || `Request failed (${response.status})`); }
+    if (!response.ok) { const body = await response.json().catch(() => null); const detail = body?.detail; throw new Error((typeof detail === "string" ? detail : detail?.message) || `Request failed (${response.status})`); }
     return response;
   }, [auth, selectedId]);
 
@@ -296,10 +296,10 @@ export default function Home() {
   const canManageProducts = selectedRole === "owner" || selectedRole === "admin";
   const canRecordSales = canManageProducts || selectedRole === "sales";
 
-  function entrySaved(kind: EntryKind) {
+  function entrySaved(kind: EntryKind, importedCount?: number) {
     const messages: Record<EntryKind, string> = {
-      product: "Product added to your inventory.",
-      customer: "Customer added to your records.",
+      product: importedCount === undefined ? "Product added to your inventory." : `${importedCount} products imported to your inventory.`,
+      customer: importedCount === undefined ? "Customer added to your records." : `${importedCount} customers imported to your records.`,
       sale: "Sale recorded and inventory updated.",
     };
     setEntryKind(null);

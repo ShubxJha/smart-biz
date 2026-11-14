@@ -501,6 +501,35 @@ def list_customers(business: models.Business = Depends(require_business), db: Se
     return db.scalars(select(models.Customer).where(models.Customer.business_id == business.id).order_by(models.Customer.name)).all()
 
 
+@app.post("/api/v1/customers/import", tags=["customers"])
+def import_customers(payload: schemas.CustomerImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin", "sales")), db: Session = Depends(get_db)):
+    seen: set[str] = set()
+    conflicts: list[dict[str, object]] = []
+    existing = {
+        email.casefold()
+        for email in db.scalars(select(models.Customer.email).where(
+            models.Customer.business_id == business.id,
+            models.Customer.email.is_not(None),
+        )).all()
+        if email
+    }
+    for row_number, row in enumerate(payload.rows, start=2):
+        email = row.email.casefold() if row.email else None
+        if email and (email in seen or email in existing):
+            conflicts.append({"row": row_number, "field": "email", "message": "Email already exists in this file or workspace"})
+        if email:
+            seen.add(email)
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "No customers were imported. Fix the duplicate emails and try again.", "rows": conflicts})
+    db.add_all([models.Customer(business_id=business.id, **row.model_dump()) for row in payload.rows])
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="No customers were imported because a duplicate email was added at the same time. Refresh and try again.") from None
+    return {"created": len(payload.rows)}
+
+
 @app.post("/api/v1/products", response_model=schemas.ProductOut, status_code=201, tags=["products"])
 def create_product(payload: schemas.ProductCreate, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
     product = models.Product(business_id=business.id, **payload.model_dump())
@@ -517,6 +546,30 @@ def create_product(payload: schemas.ProductCreate, business: models.Business = D
 @app.get("/api/v1/products", response_model=list[schemas.ProductOut], tags=["products"])
 def list_products(business: models.Business = Depends(require_business), db: Session = Depends(get_db)):
     return db.scalars(select(models.Product).where(models.Product.business_id == business.id).order_by(models.Product.name)).all()
+
+
+@app.post("/api/v1/products/import", tags=["products"])
+def import_products(payload: schemas.ProductImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin")), db: Session = Depends(get_db)):
+    seen: set[str] = set()
+    conflicts: list[dict[str, object]] = []
+    existing = {
+        sku.casefold()
+        for sku in db.scalars(select(models.Product.sku).where(models.Product.business_id == business.id)).all()
+    }
+    for row_number, row in enumerate(payload.rows, start=2):
+        sku = row.sku.casefold()
+        if sku in seen or sku in existing:
+            conflicts.append({"row": row_number, "field": "sku", "message": "SKU already exists in this file or workspace"})
+        seen.add(sku)
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "No products were imported. Fix the duplicate SKUs and try again.", "rows": conflicts})
+    db.add_all([models.Product(business_id=business.id, **row.model_dump()) for row in payload.rows])
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="No products were imported because a duplicate SKU was added at the same time. Refresh and try again.") from None
+    return {"created": len(payload.rows)}
 
 
 @app.post("/api/v1/sales", response_model=schemas.SaleOut, status_code=201, tags=["sales"])
