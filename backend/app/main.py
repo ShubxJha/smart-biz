@@ -619,6 +619,87 @@ def create_sale(payload: schemas.SaleCreate, business: models.Business = Depends
     return sale
 
 
+@app.post("/api/v1/sales/import", tags=["sales"])
+def import_sales(payload: schemas.SaleImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin", "sales")), db: Session = Depends(get_db)):
+    products = db.scalars(select(models.Product).where(models.Product.business_id == business.id)).all()
+    products_by_sku = {product.sku.casefold(): product for product in products}
+    customers = db.scalars(select(models.Customer).where(
+        models.Customer.business_id == business.id,
+        models.Customer.email.is_not(None),
+    )).all()
+    customers_by_email = {customer.email.casefold(): customer for customer in customers if customer.email}
+    existing_refs = {
+        reference.casefold()
+        for reference in db.scalars(select(models.Sale.external_reference).where(
+            models.Sale.business_id == business.id,
+            models.Sale.external_reference.is_not(None),
+        )).all()
+        if reference
+    }
+
+    groups: dict[str, dict[str, object]] = {}
+    conflicts: list[dict[str, object]] = []
+    for row_number, row in enumerate(payload.rows, start=2):
+        reference = row.sale_ref.casefold()
+        if reference in existing_refs:
+            conflicts.append({"row": row_number, "message": f"Sale reference {row.sale_ref} has already been imported"})
+            continue
+        sold_at = row.sold_at.astimezone(timezone.utc)
+        email = row.customer_email.casefold() if row.customer_email else None
+        group = groups.get(reference)
+        if group is None:
+            group = {"reference": row.sale_ref, "sold_at": sold_at, "email": email, "items": [], "total": 0}
+            groups[reference] = group
+        elif group["sold_at"] != sold_at or group["email"] != email:
+            conflicts.append({"row": row_number, "message": "Rows with the same sale_ref must have the same sold_at and customer_email"})
+            continue
+
+        product = products_by_sku.get(row.sku.casefold())
+        if product is None:
+            conflicts.append({"row": row_number, "message": f"SKU {row.sku} was not found in this workspace"})
+            continue
+        customer = customers_by_email.get(email) if email else None
+        if email and customer is None:
+            conflicts.append({"row": row_number, "message": f"Customer email {row.customer_email} was not found in this workspace"})
+            continue
+        new_total = int(group["total"]) + row.quantity * row.unit_price_minor
+        if new_total > 2_147_483_647:
+            conflicts.append({"row": row_number, "message": "Sale total exceeds the supported maximum"})
+            continue
+        group["total"] = new_total
+        group["items"].append((product, row.quantity, row.unit_price_minor))
+        group["customer"] = customer
+
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "No sales were imported. Fix the flagged rows and try again.", "rows": conflicts})
+
+    sales: list[models.Sale] = []
+    for group in groups.values():
+        sale = models.Sale(
+            business_id=business.id,
+            customer_id=group["customer"].id if group.get("customer") else None,
+            total_minor=group["total"],
+            currency=business.currency,
+            external_reference=group["reference"],
+            created_at=group["sold_at"],
+        )
+        for product, quantity, unit_price_minor in group["items"]:
+            sale.items.append(models.SaleItem(
+                product_id=product.id,
+                product_name=product.name,
+                quantity=quantity,
+                unit_price_minor=unit_price_minor,
+            ))
+        sales.append(sale)
+    db.add_all(sales)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="No sales were imported because a sale reference was already added. Refresh and try again.") from None
+    return {"created": len(sales), "rows": len(payload.rows)}
+
+
 @app.get("/api/v1/sales", response_model=list[schemas.SaleOut], tags=["sales"])
 def list_sales(
     from_date: date | None = None,

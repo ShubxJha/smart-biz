@@ -300,7 +300,7 @@ export default function Home() {
     const messages: Record<EntryKind, string> = {
       product: importedCount === undefined ? "Product added to your inventory." : `${importedCount} products imported to your inventory.`,
       customer: importedCount === undefined ? "Customer added to your records." : `${importedCount} customers imported to your records.`,
-      sale: "Sale recorded and inventory updated.",
+      sale: importedCount === undefined ? "Sale recorded and inventory updated." : `${importedCount} historical sales imported. Current inventory was not changed.`,
     };
     setEntryKind(null);
     setActionNotice(messages[kind]);

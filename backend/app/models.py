@@ -130,13 +130,17 @@ class Product(Base):
 
 class Sale(Base):
     __tablename__ = "sales"
-    __table_args__ = (CheckConstraint("total_minor >= 0", name="ck_sale_total_nonnegative"),)
+    __table_args__ = (
+        CheckConstraint("total_minor >= 0", name="ck_sale_total_nonnegative"),
+        UniqueConstraint("business_id", "external_reference", name="uq_sale_business_external_reference"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     business_id: Mapped[int] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True)
     total_minor: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3))
+    external_reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     business: Mapped[Business] = relationship(back_populates="sales")
     customer: Mapped[Customer | None] = relationship(back_populates="sales")
