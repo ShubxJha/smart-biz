@@ -263,12 +263,12 @@ class SaleCreate(BaseModel):
 class SaleImportItem(BaseModel):
     sale_ref: str = Field(min_length=1, max_length=128)
     sold_at: datetime
-    customer_email: str | None = Field(default=None, max_length=254)
+    customer_name: str | None = Field(default=None, max_length=160)
     sku: str = Field(min_length=1, max_length=64)
     quantity: int = Field(gt=0, le=2_147_483_647)
     unit_price_minor: int = Field(ge=0, le=2_147_483_647)
 
-    @field_validator("sale_ref", "sku", "customer_email", mode="before")
+    @field_validator("sale_ref", "sku", "customer_name", mode="before")
     @classmethod
     def strip_import_text(cls, value):
         return value.strip() if isinstance(value, str) else value
@@ -280,14 +280,10 @@ class SaleImportItem(BaseModel):
             raise ValueError("sold_at must include a timezone, such as Z or +05:30")
         return value
 
-    @field_validator("customer_email")
+    @field_validator("customer_name")
     @classmethod
-    def normalize_import_email(cls, value: str | None) -> str | None:
-        if value == "":
-            return None
-        if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
-            raise ValueError("customer_email must be a valid email address")
-        return value.lower() if value else value
+    def normalize_import_customer_name(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class SaleImportRequest(BaseModel):

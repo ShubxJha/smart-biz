@@ -242,7 +242,7 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
       const parsed = parseCsv(await file.text());
       const expected = kind === "product" ? ["name", "sku", "price", "stock_quantity"]
         : kind === "customer" ? ["name", "email", "phone"]
-          : ["sale_ref", "sold_at", "customer_email", "sku", "quantity", "unit_price"];
+          : ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price"];
       const required = kind === "product" ? ["name", "sku", "price"]
         : kind === "customer" ? ["name"]
           : ["sale_ref", "sold_at", "sku", "quantity", "unit_price"];
@@ -252,7 +252,7 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
       if (new Set(headers).size !== headers.length) throw new Error("The CSV has duplicate column names.");
       const positions = new Map(headers.map((header, index) => [header, index]));
       const seen = new Set<string>();
-      const saleGroups = new Map<string, { soldAt: string; customerEmail: string; line: number }>();
+      const saleGroups = new Map<string, { soldAt: string; customerName: string; line: number }>();
       const existing = kind === "product"
         ? new Set(products.map((product) => product.sku.trim().toLowerCase()))
         : new Set(customers.flatMap((customer) => customer.email ? [customer.email.trim().toLowerCase()] : []));
@@ -296,13 +296,13 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
         } else {
           const saleRef = get("sale_ref");
           const soldAt = get("sold_at");
-          const customerEmail = get("customer_email").toLowerCase();
+          const customerName = get("customer_name");
           const sku = get("sku");
           const quantity = get("quantity");
           const unitPrice = get("unit_price");
           data.sale_ref = saleRef;
           data.sold_at = soldAt;
-          data.customer_email = customerEmail || null;
+          data.customer_name = customerName || null;
           data.sku = sku;
           data.quantity = 0;
           data.unit_price_minor = 0;
@@ -312,7 +312,9 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
           const parsedDate = Date.parse(soldAt);
           const normalizedDate = Number.isNaN(parsedDate) ? "" : new Date(parsedDate).toISOString();
           if (!dateHasZone || !normalizedDate) errors.push("Sale date must be valid ISO date/time with a timezone (for example, +05:30)");
-          if (customerEmail && !customers.some((customer) => customer.email?.toLowerCase() === customerEmail)) errors.push("Customer email was not found in this workspace");
+          const matchingCustomers = customerName ? customers.filter((customer) => customer.name.toLowerCase() === customerName.toLowerCase()) : [];
+          if (customerName && matchingCustomers.length === 0) errors.push("Customer name was not found in this workspace");
+          if (matchingCustomers.length > 1) errors.push("More than one customer has this name; use a unique name");
           if (sku && !products.some((product) => product.sku.toLowerCase() === sku.toLowerCase())) errors.push("SKU was not found in this workspace");
           if (sku.length > 64) errors.push("SKU must be 64 characters or fewer");
           if (!/^\d+$/.test(quantity) || !Number.isSafeInteger(Number(quantity)) || Number(quantity) < 1 || Number(quantity) > 2147483647) errors.push("Quantity must be a whole number greater than zero");
@@ -322,8 +324,8 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
           if (saleRef && normalizedDate) {
             const groupKey = saleRef.toLowerCase();
             const prior = saleGroups.get(groupKey);
-            if (prior && (prior.soldAt !== normalizedDate || prior.customerEmail !== customerEmail)) errors.push(`Must match sale_ref group on row ${prior.line} (same date and customer)`);
-            else if (!prior) saleGroups.set(groupKey, { soldAt: normalizedDate, customerEmail, line });
+            if (prior && (prior.soldAt !== normalizedDate || prior.customerName.toLowerCase() !== customerName.toLowerCase())) errors.push(`Must match sale_ref group on row ${prior.line} (same date and customer)`);
+            else if (!prior) saleGroups.set(groupKey, { soldAt: normalizedDate, customerName, line });
             data.sold_at = normalizedDate;
           }
         }
@@ -341,7 +343,7 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
   function downloadTemplate() {
     const headers = kind === "product" ? "name,sku,price,stock_quantity\r\n"
       : kind === "customer" ? "name,email,phone\r\n"
-        : "sale_ref,sold_at,customer_email,sku,quantity,unit_price\r\n";
+        : "sale_ref,sold_at,customer_name,sku,quantity,unit_price\r\n";
     const url = URL.createObjectURL(new Blob([headers], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -371,7 +373,7 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
   const importedCount = kind === "sale" ? new Set(preview.map((row) => String(row.data.sale_ref || "").toLowerCase()).filter(Boolean)).size : preview.length;
   const entityLabel = kind === "product" ? "products" : kind === "customer" ? "customers" : "sales";
   return <section className="csv-import-panel" aria-label={`Import ${kind}s from CSV`}>
-    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Use one row per product line. Repeat sale_ref to group items into one order; include a timezone in sold_at." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
+    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Use one row per product line. Repeat sale_ref to group items into one order; use customer_name to link a customer (leave blank for walk-ins), and include a timezone in sold_at." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
     <label className="csv-file-picker">Choose CSV file<input type="file" accept=".csv,text/csv" onChange={selectFile} disabled={reading || saving}/></label>
     {reading && <p className="entry-hint">Reading and checking the file…</p>}
     {filename && <p className="csv-file-name">{filename}</p>}

@@ -686,11 +686,10 @@ def create_sale(payload: schemas.SaleCreate, business: models.Business = Depends
 def import_sales(payload: schemas.SaleImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin", "sales")), db: Session = Depends(get_db)):
     products = db.scalars(select(models.Product).where(models.Product.business_id == business.id)).all()
     products_by_sku = {product.sku.casefold(): product for product in products}
-    customers = db.scalars(select(models.Customer).where(
-        models.Customer.business_id == business.id,
-        models.Customer.email.is_not(None),
-    )).all()
-    customers_by_email = {customer.email.casefold(): customer for customer in customers if customer.email}
+    customers = db.scalars(select(models.Customer).where(models.Customer.business_id == business.id)).all()
+    customers_by_name: dict[str, list[models.Customer]] = {}
+    for customer in customers:
+        customers_by_name.setdefault(customer.name.casefold(), []).append(customer)
     existing_refs = {
         reference.casefold()
         for reference in db.scalars(select(models.Sale.external_reference).where(
@@ -708,23 +707,27 @@ def import_sales(payload: schemas.SaleImportRequest, business: models.Business =
             conflicts.append({"row": row_number, "message": f"Sale reference {row.sale_ref} has already been imported"})
             continue
         sold_at = row.sold_at.astimezone(timezone.utc)
-        email = row.customer_email.casefold() if row.customer_email else None
+        customer_name = row.customer_name.casefold() if row.customer_name else None
         group = groups.get(reference)
         if group is None:
-            group = {"reference": row.sale_ref, "sold_at": sold_at, "email": email, "items": [], "total": 0}
+            group = {"reference": row.sale_ref, "sold_at": sold_at, "customer_name": customer_name, "items": [], "total": 0}
             groups[reference] = group
-        elif group["sold_at"] != sold_at or group["email"] != email:
-            conflicts.append({"row": row_number, "message": "Rows with the same sale_ref must have the same sold_at and customer_email"})
+        elif group["sold_at"] != sold_at or group["customer_name"] != customer_name:
+            conflicts.append({"row": row_number, "message": "Rows with the same sale_ref must have the same sold_at and customer_name"})
             continue
 
         product = products_by_sku.get(row.sku.casefold())
         if product is None:
             conflicts.append({"row": row_number, "message": f"SKU {row.sku} was not found in this workspace"})
             continue
-        customer = customers_by_email.get(email) if email else None
-        if email and customer is None:
-            conflicts.append({"row": row_number, "message": f"Customer email {row.customer_email} was not found in this workspace"})
+        matching_customers = customers_by_name.get(customer_name, []) if customer_name else []
+        if customer_name and not matching_customers:
+            conflicts.append({"row": row_number, "message": f"Customer {row.customer_name} was not found in this workspace"})
             continue
+        if len(matching_customers) > 1:
+            conflicts.append({"row": row_number, "message": f"More than one customer is named {row.customer_name}; use a unique customer name"})
+            continue
+        customer = matching_customers[0] if matching_customers else None
         new_total = int(group["total"]) + row.quantity * row.unit_price_minor
         if new_total > 2_147_483_647:
             conflicts.append({"row": row_number, "message": "Sale total exceeds the supported maximum"})
