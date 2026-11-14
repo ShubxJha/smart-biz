@@ -688,7 +688,11 @@ def top_products(
             models.Sale.created_at < end_utc,
         )
         .group_by(models.SaleItem.product_name)
-        .order_by(func.sum(models.SaleItem.quantity).desc(), models.SaleItem.product_name)
+        .order_by(
+            func.sum(models.SaleItem.quantity * models.SaleItem.unit_price_minor).desc(),
+            func.sum(models.SaleItem.quantity).desc(),
+            models.SaleItem.product_name,
+        )
         .limit(limit)
     ).all()
     return {
