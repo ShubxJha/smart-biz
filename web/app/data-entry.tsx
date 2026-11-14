@@ -258,11 +258,14 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
         : new Set(customers.flatMap((customer) => customer.email ? [customer.email.trim().toLowerCase()] : []));
       const rows = parsed.rows.filter((row) => row.cells.some((cell) => cell.trim())).map(({ line, cells }): ImportPreviewRow => {
         const get = (header: string) => { const index = positions.get(header); return index === undefined ? "" : (cells[index] || "").trim(); };
-        const name = get("name");
+        const name = kind === "sale" ? "" : get("name");
         const errors: string[] = [];
-        const data: Record<string, string | number | null> = { name };
-        if (!name) errors.push("Name is required");
-        if (name.length > 160) errors.push("Name must be 160 characters or fewer");
+        const data: Record<string, string | number | null> = {};
+        if (kind !== "sale") {
+          data.name = name;
+          if (!name) errors.push("Name is required");
+          if (name.length > 160) errors.push("Name must be 160 characters or fewer");
+        }
         if (kind === "product") {
           const sku = get("sku");
           const price = get("price");
