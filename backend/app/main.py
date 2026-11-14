@@ -771,6 +771,7 @@ def list_sales(
     from_date: date | None = None,
     to_date: date | None = None,
     customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     business: models.Business = Depends(require_business),
@@ -791,6 +792,8 @@ def list_sales(
     )
     if customer_id is not None:
         statement = statement.where(models.Sale.customer_id == customer_id)
+    if product_id is not None:
+        statement = statement.where(select(models.SaleItem.id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists())
     return db.scalars(statement).all()
 
 
@@ -893,18 +896,27 @@ def delete_sale(sale_id: int, business: models.Business = Depends(require_busine
 def dashboard_summary(
     from_date: date | None = None,
     to_date: date | None = None,
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
     business: models.Business = Depends(require_business),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc, start_day, end_day, _ = reporting_window(business, from_date, to_date)
-    count, revenue = db.execute(
-        select(func.count(models.Sale.id), func.coalesce(func.sum(models.Sale.total_minor), 0))
-        .where(
-            models.Sale.business_id == business.id,
-            models.Sale.created_at >= start_utc,
-            models.Sale.created_at < end_utc,
-        )
-    ).one()
+    conditions = [models.Sale.business_id == business.id, models.Sale.created_at >= start_utc, models.Sale.created_at < end_utc]
+    if customer_id is not None:
+        conditions.append(models.Sale.customer_id == customer_id)
+    if product_id is not None:
+        matching_items = select(models.SaleItem.sale_id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists()
+        conditions.append(matching_items)
+        count, revenue = db.execute(
+            select(func.count(models.Sale.id.distinct()), func.coalesce(func.sum(models.SaleItem.quantity * models.SaleItem.unit_price_minor), 0))
+            .join(models.SaleItem, models.SaleItem.sale_id == models.Sale.id).where(*conditions, models.SaleItem.product_id == product_id)
+        ).one()
+    else:
+        count, revenue = db.execute(
+            select(func.count(models.Sale.id), func.coalesce(func.sum(models.Sale.total_minor), 0))
+            .where(*conditions)
+        ).one()
     return {
         "business_id": business.id,
         "currency": business.currency,
@@ -921,25 +933,27 @@ def sales_trend(
     from_date: date | None = None,
     to_date: date | None = None,
     interval: Literal["day", "week", "month"] = "day",
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
     business: models.Business = Depends(require_business),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc, start_day, end_day, _ = reporting_window(business, from_date, to_date)
     local_created_at = func.timezone(business.timezone, models.Sale.created_at)
     bucket_expr = func.date_trunc(interval, local_created_at)
-    rows = db.execute(
-        select(
+    conditions = [models.Sale.business_id == business.id, models.Sale.created_at >= start_utc, models.Sale.created_at < end_utc]
+    if customer_id is not None:
+        conditions.append(models.Sale.customer_id == customer_id)
+    trend_query = select(
             bucket_expr.label("bucket"),
-            func.count(models.Sale.id).label("order_count"),
+            func.count(models.Sale.id.distinct()).label("order_count"),
             func.coalesce(func.sum(models.Sale.total_minor), 0).label("revenue_minor"),
-        )
-        .where(
-            models.Sale.business_id == business.id,
-            models.Sale.created_at >= start_utc,
-            models.Sale.created_at < end_utc,
-        )
-        .group_by(bucket_expr)
-        .order_by(bucket_expr)
+        ).where(*conditions)
+    if product_id is not None:
+        conditions.append(select(models.SaleItem.id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists())
+        trend_query = select(bucket_expr.label("bucket"), func.count(models.Sale.id.distinct()).label("order_count"), func.coalesce(func.sum(models.SaleItem.quantity * models.SaleItem.unit_price_minor), 0).label("revenue_minor")).join(models.SaleItem, models.SaleItem.sale_id == models.Sale.id).where(*conditions, models.SaleItem.product_id == product_id)
+    rows = db.execute(
+        trend_query.group_by(bucket_expr).order_by(bucket_expr)
     ).all()
     values = {row.bucket.date(): (row.order_count, row.revenue_minor) for row in rows}
     buckets = []
@@ -966,6 +980,8 @@ def top_products(
     from_date: date | None = None,
     to_date: date | None = None,
     limit: int = Query(default=10, ge=1, le=100),
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
     business: models.Business = Depends(require_business),
     db: Session = Depends(get_db),
 ):
@@ -981,6 +997,8 @@ def top_products(
             models.Sale.business_id == business.id,
             models.Sale.created_at >= start_utc,
             models.Sale.created_at < end_utc,
+            *([models.Sale.customer_id == customer_id] if customer_id is not None else []),
+            *([models.SaleItem.product_id == product_id] if product_id is not None else []),
         )
         .group_by(models.SaleItem.product_name)
         .order_by(
@@ -1006,12 +1024,19 @@ def top_products(
 def export_sales_csv(
     from_date: date | None = None,
     to_date: date | None = None,
+    customer_id: int | None = Query(default=None, gt=0),
+    product_id: int | None = Query(default=None, gt=0),
     business: models.Business = Depends(require_business),
     db: Session = Depends(get_db),
 ):
     start_utc, end_utc, start_day, end_day, business_zone = reporting_window(business, from_date, to_date)
+    sales_statement = select(models.Sale)
+    if product_id is not None:
+        sales_statement = sales_statement.where(select(models.SaleItem.id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists())
+    if customer_id is not None:
+        sales_statement = sales_statement.where(models.Sale.customer_id == customer_id)
     sales = db.scalars(
-        select(models.Sale)
+        sales_statement
         .options(selectinload(models.Sale.items))
         .where(
             models.Sale.business_id == business.id,
@@ -1032,6 +1057,8 @@ def export_sales_csv(
     for sale in sales:
         sold_at = sale.created_at.astimezone(business_zone).isoformat()
         for item in sale.items:
+            if product_id is not None and item.product_id != product_id:
+                continue
             writer.writerow([
                 sale.id,
                 sold_at,

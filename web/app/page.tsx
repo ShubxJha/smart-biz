@@ -85,6 +85,8 @@ export default function Home() {
   const [actionNotice, setActionNotice] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [filterCustomerId, setFilterCustomerId] = useState("");
+  const [filterProductId, setFilterProductId] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [trend, setTrend] = useState<Bucket[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -220,6 +222,8 @@ export default function Home() {
     setLoading(true); setError("");
     setDashboardStatus("checking");
     const params = new URLSearchParams({ from_date: start, to_date: end });
+    if (filterCustomerId) params.set("customer_id", filterCustomerId);
+    if (filterProductId) params.set("product_id", filterProductId);
     try {
       const [summaryResponse, trendResponse, productsResponse, salesResponse] = await Promise.all([
         request(`/api/v1/dashboard/summary?${params}`),
@@ -232,7 +236,7 @@ export default function Home() {
       setDashboardStatus("connected");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load your sales data."); setDashboardStatus("issue"); }
     finally { setLoading(false); }
-  }, [auth, selectedId, start, end, interval, request]);
+  }, [auth, selectedId, start, end, interval, filterCustomerId, filterProductId, request]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
@@ -296,6 +300,8 @@ export default function Home() {
     setError("");
     try {
       const params = new URLSearchParams({ from_date: start, to_date: end });
+      if (filterCustomerId) params.set("customer_id", filterCustomerId);
+      if (filterProductId) params.set("product_id", filterProductId);
       const response = await request(`/api/v1/reports/sales.csv?${params}`);
       const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `smartbiz-sales-${start}-${end}.csv`; link.click(); URL.revokeObjectURL(url);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "CSV download failed."); }
@@ -390,7 +396,7 @@ export default function Home() {
       {activeSection === "sales" && canRecordSales && <><button className="primary-button entry-sale-button" type="button" onClick={() => openEntry("sale")}><Icon name="bag" size={15}/> Record sale</button><button className="secondary-button" type="button" onClick={() => openEntry("sale", true)}><Icon name="download" size={15}/> Import CSV</button></>}
       {(activeSection === "overview" || activeSection === "sales") && <button className="secondary-button" type="button" onClick={() => void downloadCsv()}><Icon name="download" size={15}/> Export report</button>}
     </div></div>
-    {(activeSection === "overview" || activeSection === "sales" || activeSection === "analytics") && <section className="filter-bar"><div className="filter-title"><span className="filter-icon"><Icon name="calendar" size={16}/></span><span><strong>Date range</strong><small>{dateRange}</small></span></div><div className="date-controls"><label><span>From</span><input type="date" value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></label><span className="date-separator">—</span><label><span>To</span><input type="date" value={end} min={start || undefined} max={todayInZone(business?.timezone)} onChange={(event) => setEnd(event.target.value)}/></label><button className="date-apply" onClick={() => void loadDashboard()} disabled={loading || !start || !end}>{loading ? "Loading…" : "Apply"}</button></div><button className="filter-export" onClick={() => void downloadCsv()} title="Export report"><Icon name="download" size={17}/></button></section>}
+    {(activeSection === "overview" || activeSection === "sales" || activeSection === "analytics") && <section className="filter-bar"><div className="filter-title"><span className="filter-icon"><Icon name="calendar" size={16}/></span><span><strong>Filter sales</strong><small>{dateRange}</small></span></div><div className="sales-filter-controls"><label><span>Customer</span><select value={filterCustomerId} onChange={(event) => setFilterCustomerId(event.target.value)}><option value="">All customers</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select></label><label><span>Product</span><select value={filterProductId} onChange={(event) => setFilterProductId(event.target.value)}><option value="">All products</option>{inventory.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><div className="date-controls"><label><span>From</span><input type="date" value={start} max={end || undefined} onChange={(event) => setStart(event.target.value)}/></label><span className="date-separator">—</span><label><span>To</span><input type="date" value={end} min={start || undefined} max={todayInZone(business?.timezone)} onChange={(event) => setEnd(event.target.value)}/></label></div><button className="date-apply" onClick={() => void loadDashboard()} disabled={loading || !start || !end}>{loading ? "Loading…" : "Apply filters"}</button><button className="text-button clear-filters" onClick={() => { setFilterCustomerId(""); setFilterProductId(""); const day = todayInZone(business?.timezone); setEnd(day); setStart(earlier(day, 29)); }}>Reset</button></div><button className="filter-export" onClick={() => void downloadCsv()} title="Export filtered report"><Icon name="download" size={17}/></button></section>}
     {actionNotice && <div className="entry-success" role="status">{actionNotice}<button type="button" onClick={() => setActionNotice("")} aria-label="Dismiss">×</button></div>}
     {inviteError && <div className="inline-error" role="alert">{inviteError}<button onClick={() => void logout()}>Sign out to use another account</button></div>}
     {error && <div className="inline-error" role="alert">{error}<button onClick={() => void loadDashboard()}>Retry</button></div>}
