@@ -101,12 +101,13 @@ def enforce_auth_rate_limit(request: Request, db: Session, action: str, identity
     db.commit()
 
 
-def create_verification(db: Session, user: models.User) -> tuple[str, str]:
+def create_verification(db: Session, user: models.User, pending_email: str | None = None) -> tuple[str, str]:
     token = secrets.token_urlsafe(32)
     db.execute(delete(models.EmailVerification).where(models.EmailVerification.user_id == user.id))
     db.add(models.EmailVerification(
         user_id=user.id,
         token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        pending_email=pending_email,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
     ))
     db.commit()
@@ -243,11 +244,56 @@ def verify_email(payload: schemas.EmailVerificationRequest, request: Request, db
     user = db.get(models.User, verification.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Account not found")
+    if verification.pending_email is not None:
+        duplicate = db.scalar(select(models.User.id).where(models.User.email == verification.pending_email, models.User.id != user.id))
+        if duplicate is not None:
+            raise HTTPException(status_code=409, detail="That email address is already linked to another account")
+        user.email = verification.pending_email
     user.email_verified = True
     db.delete(verification)
     db.execute(delete(models.EmailVerification).where(models.EmailVerification.user_id == user.id))
     db.commit()
     return Response(status_code=204)
+
+
+@app.patch("/api/v1/auth/profile", response_model=schemas.UserOut, tags=["authentication"])
+def update_profile(payload: schemas.ProfileUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.full_name = payload.full_name.strip()
+    if not current_user.full_name:
+        raise HTTPException(status_code=422, detail="Name cannot be blank")
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@app.post("/api/v1/auth/email-change", tags=["authentication"])
+def request_email_change(payload: schemas.EmailChangeRequest, request: Request, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    email = payload.email.strip().lower()
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if email == current_user.email:
+        raise HTTPException(status_code=409, detail="This is already your account email")
+    if db.scalar(select(models.User.id).where(models.User.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    enforce_auth_rate_limit(request, db, "email-change", email, 5)
+    token, verification_url = create_verification(db, current_user, pending_email=email)
+    try:
+        email_sent = send_email_verification(recipient=email, token=token)
+    except EmailDeliveryError as exc:
+        logger.warning("Email change verification delivery failed for user %s: %s", current_user.id, exc)
+        email_sent = False
+    return {"message": "Confirm the new email address to finish changing it.", "delivery_status": "sent" if email_sent else "manual", "verification_url": None if email_sent else verification_url}
+
+
+@app.post("/api/v1/auth/password", tags=["authentication"])
+def change_password(payload: schemas.PasswordChangeRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if verify_password(payload.new_password, current_user.password_hash):
+        raise HTTPException(status_code=422, detail="Choose a password different from your current one")
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"message": "Password changed successfully."}
 
 
 @app.get("/api/v1/auth/me", response_model=schemas.AccountOut, tags=["authentication"])
