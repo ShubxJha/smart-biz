@@ -89,3 +89,14 @@
 .sale-edit-line label{display:flex;min-width:0;flex-direction:column;gap:7px;color:#495a50;font-size:10px;font-weight:600}
 .sale-edit-line input,.sale-edit-line select{width:100%;height:40px;padding:0 9px;border:1px solid #e1e8e3;border-radius:6px;background:#fff;color:#30443a;font-size:11px}
 @media(max-width:650px){.sale-edit-line{grid-template-columns:minmax(0,1fr) 62px;gap:8px}.sale-edit-line label:first-child{grid-column:1/-1}.sale-edit-line label:nth-child(3){grid-column:1}.sale-edit-line .entry-remove-line{grid-column:2;grid-row:2;justify-self:end}}
+
+.sales-column-mapper{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid #e4ebe7;border-radius:8px;background:#f9fbfa}
+.sales-column-mapper h4{margin:0 0 4px;color:#2c4237;font-size:12px}
+.sales-column-mapper>div:first-child p{margin:0;color:#7e8b84;font-size:10px;line-height:1.5}
+.sales-column-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.sales-column-grid label{display:flex;flex-direction:column;gap:5px;color:#52645a;font-size:10px;font-weight:600}
+.sales-column-grid label .entry-optional{font-weight:400}
+.sales-column-grid select{width:100%;height:36px;padding:0 9px;border:1px solid #dfe8e2;border-radius:6px;background:#fff;color:#30443a;font:inherit}
+.sales-column-grid select:focus{outline:2px solid #c2e0cf;border-color:#42a579}
+.sales-column-mapper>.entry-hint,.sales-column-mapper>.entry-error{margin:0}
+@media(max-width:650px){.sales-column-grid{grid-template-columns:1fr}}

@@ -8,9 +8,12 @@ type CustomerRecord = { id: number; name: string; email: string | null; phone: s
 type SaleLine = { id: number; product_id: string; quantity: string };
 type Requester = (path: string, init?: RequestInit) => Promise<Response>;
 type ImportPreviewRow = { line: number; values: string[]; errors: string[]; data: Record<string, string | number | null> };
+type SaleImportField = "sale_ref" | "sold_at" | "customer_name" | "sku" | "quantity" | "unit_price";
+type CsvSourceRow = { line: number; cells: string[] };
 
 type Props = {
   kind: EntryKind;
+  businessId: number;
   currency: string;
   request: Requester;
   startInImport?: boolean;
@@ -24,7 +27,7 @@ const TITLES: Record<EntryKind, string> = {
   sale: "Record a sale",
 };
 
-export default function DataEntryModal({ kind, currency, request, startInImport = false, onClose, onSaved }: Props) {
+export default function DataEntryModal({ kind, businessId, currency, request, startInImport = false, onClose, onSaved }: Props) {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(kind !== "sale");
@@ -142,6 +145,7 @@ export default function DataEntryModal({ kind, currency, request, startInImport 
 
       {importMode && <CsvImportPanel
         kind={kind}
+        businessId={businessId}
         currency={currency}
         products={products}
         customers={customers}
@@ -211,8 +215,9 @@ function RecordList({ title, loading, empty, count, children }: { title: string;
   </section>;
 }
 
-function CsvImportPanel({ kind, currency, products, customers, recordsLoading, request, onSaved, onBusyChange }: {
+function CsvImportPanel({ kind, businessId, currency, products, customers, recordsLoading, request, onSaved, onBusyChange }: {
   kind: EntryKind;
+  businessId: number;
   currency: string;
   products: ProductRecord[];
   customers: CustomerRecord[];
@@ -226,6 +231,30 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [salesHeaders, setSalesHeaders] = useState<string[]>([]);
+  const [salesSourceRows, setSalesSourceRows] = useState<CsvSourceRow[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Partial<Record<SaleImportField, string>>>({});
+
+  const salesMappingReady = ["sale_ref", "sold_at", "sku", "quantity", "unit_price"].every((field) => {
+    const selected = columnMapping[field as SaleImportField];
+    return Boolean(selected && salesHeaders.includes(selected));
+  });
+
+  useEffect(() => {
+    if (kind !== "sale" || !salesSourceRows.length) return;
+    if (!salesMappingReady) { setPreview([]); return; }
+    setPreview(buildSalesPreview(salesHeaders, salesSourceRows, columnMapping, products, customers));
+  }, [kind, salesHeaders, salesSourceRows, columnMapping, products, customers, salesMappingReady]);
+
+  function changeColumnMapping(field: SaleImportField, value: string) {
+    const next = { ...columnMapping };
+    if (value) next[field] = value;
+    else delete next[field];
+    setPreview([]);
+    setColumnMapping(next);
+    try { localStorage.setItem(`smartbiz-sales-import-columns-v1-${businessId}`, JSON.stringify(next)); }
+    catch { /* Import still works if the browser cannot store preferences. */ }
+  }
 
   async function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -233,6 +262,9 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
     setPreview([]);
     setFilename("");
     setError("");
+    setSalesHeaders([]);
+    setSalesSourceRows([]);
+    setColumnMapping({});
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".csv")) { setError("Choose a .csv file. Excel files are not supported yet."); return; }
     if (file.size > 1024 * 1024) { setError("This file is larger than 1 MB. Split it into smaller CSV files and try again."); return; }
@@ -240,6 +272,29 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
     setReading(true);
     try {
       const parsed = parseCsv(await file.text());
+      if (kind === "sale") {
+        const headers = parsed.headers.map((header) => header.trim());
+        const normalized = headers.map(normalizeHeader);
+        if (new Set(normalized).size !== normalized.length) throw new Error("The CSV has duplicate column names. Rename the repeated columns and try again.");
+        const rows = parsed.rows.filter((row) => row.cells.some((cell) => cell.trim()));
+        if (!rows.length) throw new Error("The CSV has a header but no data rows.");
+        if (rows.length > 500) throw new Error("Import up to 500 rows at a time. Split this CSV and try again.");
+        let remembered: Partial<Record<SaleImportField, string>> = {};
+        try {
+          const saved = localStorage.getItem(`smartbiz-sales-import-columns-v1-${businessId}`);
+          if (saved) remembered = JSON.parse(saved) as Partial<Record<SaleImportField, string>>;
+        } catch { /* Ignore malformed saved column preferences. */ }
+        const detected = detectSalesColumns(headers);
+        const validRemembered = Object.fromEntries(Object.entries(remembered).filter(([, header]) => typeof header === "string" && headers.includes(header))) as Partial<Record<SaleImportField, string>>;
+        const initialMapping = { ...detected, ...validRemembered };
+        setSalesHeaders(headers);
+        setSalesSourceRows(rows);
+        setColumnMapping(initialMapping);
+        try { localStorage.setItem(`smartbiz-sales-import-columns-v1-${businessId}`, JSON.stringify(initialMapping)); }
+        catch { /* Import still works if the browser cannot store preferences. */ }
+        setFilename(file.name);
+        return;
+      }
       const expected = kind === "product" ? ["name", "sku", "price", "stock_quantity"]
         : kind === "customer" ? ["name", "email", "phone"]
           : ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price"];
@@ -258,14 +313,11 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
         : new Set(customers.flatMap((customer) => customer.email ? [customer.email.trim().toLowerCase()] : []));
       const rows = parsed.rows.filter((row) => row.cells.some((cell) => cell.trim())).map(({ line, cells }): ImportPreviewRow => {
         const get = (header: string) => { const index = positions.get(header); return index === undefined ? "" : (cells[index] || "").trim(); };
-        const name = kind === "sale" ? "" : get("name");
+        const name = get("name");
         const errors: string[] = [];
-        const data: Record<string, string | number | null> = {};
-        if (kind !== "sale") {
-          data.name = name;
-          if (!name) errors.push("Name is required");
-          if (name.length > 160) errors.push("Name must be 160 characters or fewer");
-        }
+        const data: Record<string, string | number | null> = { name };
+        if (!name) errors.push("Name is required");
+        if (name.length > 160) errors.push("Name must be 160 characters or fewer");
         if (kind === "product") {
           const sku = get("sku");
           const price = get("price");
@@ -356,7 +408,7 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
   }
 
   async function importRows() {
-    if (preview.some((row) => row.errors.length) || !preview.length) return;
+    if (preview.some((row) => row.errors.length) || !preview.length || (kind === "sale" && !salesMappingReady)) return;
     setSaving(true); onBusyChange(true); setError("");
     try {
       const payload = preview.map((row) => row.data);
@@ -376,16 +428,22 @@ function CsvImportPanel({ kind, currency, products, customers, recordsLoading, r
   const importedCount = kind === "sale" ? new Set(preview.map((row) => String(row.data.sale_ref || "").toLowerCase()).filter(Boolean)).size : preview.length;
   const entityLabel = kind === "product" ? "products" : kind === "customer" ? "customers" : "sales";
   return <section className="csv-import-panel" aria-label={`Import ${kind}s from CSV`}>
-    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Use one row per product line. Repeat sale_ref to group items into one order; use customer_name to link a customer (leave blank for walk-ins), and include a timezone in sold_at." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
+    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Upload your business’s sales CSV and map its columns to SmartBiz fields. Customer name is optional; include a timezone with the sale date." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
     <label className="csv-file-picker">Choose CSV file<input type="file" accept=".csv,text/csv" onChange={selectFile} disabled={reading || saving}/></label>
     {reading && <p className="entry-hint">Reading and checking the file…</p>}
     {filename && <p className="csv-file-name">{filename}</p>}
+    {kind === "sale" && salesHeaders.length > 0 && <div className="sales-column-mapper">
+      <div><h4>Match your columns</h4><p>We’ll suggest matches from your headers. Review them, then check the preview below.</p></div>
+      <div className="sales-column-grid">{SALE_IMPORT_FIELDS.map((field) => <label key={field}>{SALE_FIELD_LABELS[field]}{field === "customer_name" && <span className="entry-optional">Optional</span>}<select value={columnMapping[field] || ""} onChange={(event) => changeColumnMapping(field, event.target.value)}><option value="">{field === "customer_name" ? "Skip customer matching" : "Choose a CSV column"}</option>{salesHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div>
+      <p className="entry-hint">Your column choices are remembered in this browser for this workspace.</p>
+      {!salesMappingReady && <p className="entry-error" role="alert">Choose a column for sale reference, sale date, product, quantity, and unit price to preview the file.</p>}
+    </div>}
     {error && <p className="entry-error" role="alert">{error}</p>}
     {preview.length > 0 && <>
       <p className={errorCount ? "csv-preview-summary has-errors" : "csv-preview-summary"} role="status">{preview.length} rows found{kind === "sale" ? ` · ${importedCount} sales` : ""} · {errorCount ? `${errorCount} need attention` : "all rows look good"}</p>
       <div className="csv-preview-scroll"><table className="csv-preview-table"><thead><tr><th>ROW</th><th>CSV VALUES</th><th>CHECK</th></tr></thead><tbody>{preview.slice(0, 8).map((row) => <tr key={row.line}><td>{row.line}</td><td>{row.values.join(" · ") || "—"}</td><td className={row.errors.length ? "csv-row-error" : "csv-row-valid"}>{row.errors.join("; ") || "Ready"}</td></tr>)}</tbody></table></div>
       {preview.length > 8 && <p className="entry-hint">Showing the first 8 rows. All {preview.length} rows will be checked before import.</p>}
-      <button type="button" className="primary-button" onClick={importRows} disabled={saving || recordsLoading || Boolean(errorCount)}>{saving ? "Importing…" : `Import ${importedCount} ${entityLabel}`}</button>
+      <button type="button" className="primary-button" onClick={importRows} disabled={saving || recordsLoading || Boolean(errorCount) || (kind === "sale" && !salesMappingReady)}>{saving ? "Importing…" : `Import ${importedCount} ${entityLabel}`}</button>
       {errorCount > 0 && <p className="entry-hint">Correct the flagged rows in your CSV, then choose the updated file.</p>}
     </>}
     <p className="entry-hint">CSV only · up to 500 rows and 1 MB per file.{kind !== "customer" && ` Prices use ${currency} and must have no more than 2 decimal places.`}{kind === "sale" && " Historical sales keep their original date and do not change current stock."}</p>
@@ -412,6 +470,117 @@ function parseCsv(text: string): { headers: string[]; rows: { line: number; cell
   if (!records.length) throw new Error("The CSV file is empty.");
   const [header, ...rows] = records;
   return { headers: header.cells, rows };
+}
+
+const SALE_IMPORT_FIELDS: SaleImportField[] = ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price"];
+const SALE_FIELD_LABELS: Record<SaleImportField, string> = {
+  sale_ref: "Sale / order reference",
+  sold_at: "Sale date and time",
+  customer_name: "Customer name",
+  sku: "Product SKU or name",
+  quantity: "Quantity",
+  unit_price: "Unit price",
+};
+
+function normalizeHeader(header: string) {
+  return header.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function detectSalesColumns(headers: string[]): Partial<Record<SaleImportField, string>> {
+  const aliases: Record<SaleImportField, string[]> = {
+    sale_ref: ["sale ref", "order id", "order no", "order number", "invoice no", "invoice number", "bill no", "bill number", "receipt no", "receipt number", "transaction id", "transaction no", "reference", "id"],
+    sold_at: ["sold at", "sale date", "sold date", "transaction date", "order date", "invoice date", "date time", "timestamp", "date"],
+    customer_name: ["customer name", "buyer name", "client name", "buyer", "customer", "client"],
+    sku: ["sku", "product sku", "item sku", "item code", "product code", "product name", "item name", "product", "item"],
+    quantity: ["quantity", "qty", "units", "item quantity"],
+    unit_price: ["unit price", "selling price", "sale price", "price per unit", "rate", "price"],
+  };
+  const mapping: Partial<Record<SaleImportField, string>> = {};
+  for (const field of SALE_IMPORT_FIELDS) {
+    const found = headers.find((header) => aliases[field].includes(normalizeHeader(header)));
+    if (found) mapping[field] = found;
+  }
+  return mapping;
+}
+
+function parseImportPrice(value: string): number | null {
+  if (value.includes("-") || /^\s*\(.*\)\s*$/.test(value)) return null;
+  let normalized = value.trim().replace(/[^\d.,]/g, "");
+  if (!normalized) return null;
+  const lastDot = normalized.lastIndexOf(".");
+  const lastComma = normalized.lastIndexOf(",");
+  if (lastDot >= 0 && lastComma >= 0) {
+    normalized = lastComma > lastDot ? normalized.replace(/\./g, "").replace(",", ".") : normalized.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    const decimals = normalized.length - lastComma - 1;
+    normalized = decimals === 1 || decimals === 2 ? normalized.replace(",", ".") : normalized.replace(/,/g, "");
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+  const minor = Math.round(Number(normalized) * 100);
+  return Number.isSafeInteger(minor) && minor <= 2_147_483_647 ? minor : null;
+}
+
+function buildSalesPreview(headers: string[], sourceRows: CsvSourceRow[], mapping: Partial<Record<SaleImportField, string>>, products: ProductRecord[], customers: CustomerRecord[]): ImportPreviewRow[] {
+  const positions = new Map(headers.map((header, index) => [header, index]));
+  const saleGroups = new Map<string, { soldAt: string; customerName: string; line: number }>();
+  return sourceRows.map(({ line, cells }): ImportPreviewRow => {
+    const get = (field: SaleImportField) => {
+      const header = mapping[field];
+      const index = header === undefined ? undefined : positions.get(header);
+      return index === undefined ? "" : (cells[index] || "").trim();
+    };
+    const saleRef = get("sale_ref");
+    const soldAt = get("sold_at");
+    const customerName = get("customer_name");
+    const productText = get("sku");
+    const quantityText = get("quantity").replace(/(?<=\d),(?=\d{3}(?:\D|$))/g, "");
+    const unitPriceText = get("unit_price");
+    const errors: string[] = [];
+    const data: Record<string, string | number | null> = {
+      sale_ref: saleRef,
+      sold_at: soldAt,
+      customer_name: customerName || null,
+      sku: productText,
+      quantity: 0,
+      unit_price_minor: 0,
+    };
+    if (!saleRef) errors.push("Sale/order reference is required");
+    if (saleRef.length > 128) errors.push("Sale/order reference must be 128 characters or fewer");
+    const dateHasZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(soldAt);
+    const parsedDate = Date.parse(soldAt);
+    const normalizedDate = Number.isNaN(parsedDate) ? "" : new Date(parsedDate).toISOString();
+    if (!dateHasZone || !normalizedDate) errors.push("Sale date must be ISO date/time with a timezone (for example, 2026-11-14T10:15:00+05:30)");
+
+    if (customerName) {
+      const matches = customers.filter((item) => item.name.trim().toLowerCase() === customerName.toLowerCase());
+      if (matches.length === 0) errors.push("Customer name was not found in this workspace");
+      else if (matches.length > 1) errors.push("More than one customer has this name; use a unique name");
+    }
+
+    const skuMatches = products.filter((item) => item.sku.trim().toLowerCase() === productText.toLowerCase());
+    const productNameMatches = skuMatches.length ? [] : products.filter((item) => item.name.trim().toLowerCase() === productText.toLowerCase());
+    const productMatches = skuMatches.length ? skuMatches : productNameMatches;
+    if (!productText) errors.push("Product SKU or name is required");
+    else if (productMatches.length === 0) errors.push("Product SKU or name was not found in this workspace");
+    else if (productMatches.length > 1) errors.push("More than one product has this name; map a unique SKU column");
+    else data.sku = productMatches[0].sku;
+
+    if (!/^\d+$/.test(quantityText) || !Number.isSafeInteger(Number(quantityText)) || Number(quantityText) < 1 || Number(quantityText) > 2_147_483_647) errors.push("Quantity must be a whole number greater than zero");
+    else data.quantity = Number(quantityText);
+    const unitPriceMinor = parseImportPrice(unitPriceText);
+    if (unitPriceMinor === null) errors.push("Unit price must be zero or more with up to 2 decimals");
+    else data.unit_price_minor = unitPriceMinor;
+
+    if (saleRef && normalizedDate) {
+      const groupKey = saleRef.toLowerCase();
+      const normalizedCustomerName = customerName.toLowerCase();
+      const prior = saleGroups.get(groupKey);
+      if (prior && (prior.soldAt !== normalizedDate || prior.customerName.toLowerCase() !== normalizedCustomerName)) errors.push(`Must match sale/order group on row ${prior.line} (same date and customer)`);
+      else if (!prior) saleGroups.set(groupKey, { soldAt: normalizedDate, customerName, line });
+      data.sold_at = normalizedDate;
+    }
+    return { line, values: SALE_IMPORT_FIELDS.map(get), errors, data };
+  });
 }
 
 function money(minor: number, currency: string) {
