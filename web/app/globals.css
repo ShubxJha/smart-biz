@@ -38,4 +38,5 @@
 .account-settings-note{margin-top:15px;padding:11px 12px;border-radius:7px;background:#f5f8f6}
 @media(max-width:900px) and (min-width:651px){.sidebar-bottom>.profile-popover{left:56px;right:auto;bottom:0;width:205px}}
 @media(max-width:900px){.side-nav .nav-item:not(.active){display:flex}}
+.mobile-nav{display:none}
 @media(max-width:650px){.mobile-nav{position:sticky;top:0;z-index:4;display:flex;gap:3px;overflow-x:auto;padding:5px 10px;background:#fff;border-bottom:1px solid var(--line);scrollbar-width:thin}.mobile-nav .nav-item,.mobile-nav .nav-item:not(.active){display:flex;flex:0 0 auto;align-items:center;justify-content:center;gap:6px;width:auto;height:36px;padding:0 10px;border-radius:6px;font-size:10px}.mobile-nav .nav-item svg{width:14px;height:14px}}
