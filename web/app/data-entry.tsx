@@ -33,6 +33,14 @@ export default function DataEntryModal({ kind, currency, request, onClose, onSav
   const [customerId, setCustomerId] = useState("");
 
   useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [busy, onClose]);
+
+  useEffect(() => {
     let active = true;
     const loads: Promise<void>[] = [];
     if (kind === "product" || kind === "sale") {
@@ -117,11 +125,11 @@ export default function DataEntryModal({ kind, currency, request, onClose, onSav
     setLines((current) => current.map((line) => line.id === id ? { ...line, [field]: value } : line));
   }
 
-  return <div className="entry-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  return <div className="entry-overlay" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
     <section className="entry-dialog" role="dialog" aria-modal="true" aria-labelledby="entry-title">
       <header className="entry-dialog-header">
         <div><span className="eyebrow">SMARTBIZ WORKSPACE</span><h2 id="entry-title">{TITLES[kind]}</h2></div>
-        <button className="entry-close" type="button" onClick={onClose} aria-label="Close">×</button>
+        <button className="entry-close" type="button" onClick={onClose} disabled={busy} aria-label="Close">×</button>
       </header>
 
       {kind === "product" && <div className="entry-columns">
