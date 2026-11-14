@@ -906,8 +906,6 @@ def dashboard_summary(
     if customer_id is not None:
         conditions.append(models.Sale.customer_id == customer_id)
     if product_id is not None:
-        matching_items = select(models.SaleItem.sale_id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists()
-        conditions.append(matching_items)
         count, revenue = db.execute(
             select(func.count(models.Sale.id.distinct()), func.coalesce(func.sum(models.SaleItem.quantity * models.SaleItem.unit_price_minor), 0))
             .join(models.SaleItem, models.SaleItem.sale_id == models.Sale.id).where(*conditions, models.SaleItem.product_id == product_id)
@@ -950,7 +948,6 @@ def sales_trend(
             func.coalesce(func.sum(models.Sale.total_minor), 0).label("revenue_minor"),
         ).where(*conditions)
     if product_id is not None:
-        conditions.append(select(models.SaleItem.id).where(models.SaleItem.sale_id == models.Sale.id, models.SaleItem.product_id == product_id).exists())
         trend_query = select(bucket_expr.label("bucket"), func.count(models.Sale.id.distinct()).label("order_count"), func.coalesce(func.sum(models.SaleItem.quantity * models.SaleItem.unit_price_minor), 0).label("revenue_minor")).join(models.SaleItem, models.SaleItem.sale_id == models.Sale.id).where(*conditions, models.SaleItem.product_id == product_id)
     rows = db.execute(
         trend_query.group_by(bucket_expr).order_by(bucket_expr)
