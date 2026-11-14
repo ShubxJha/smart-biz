@@ -4,3 +4,30 @@
 @media(max-width:1150px){.content-wrap{padding-left:25px;padding-right:25px}.topbar{padding:0 25px}.dashboard-grid{grid-template-columns:minmax(0,1.4fr) minmax(270px,1fr)}.metric-card{padding:14px 13px}.metric-value{font-size:19px}.filter-title{min-width:180px}.date-controls{gap:7px}.date-controls input{width:125px}}
 @media(max-width:900px){.sidebar{width:68px;padding:23px 10px 13px;align-items:center}.brand{padding:0}.brand>span:last-child,.workspace-copy,.workspace-switch select,.chevron,.nav-caption,.nav-item:not(.active){display:none}.workspace-switch{margin:27px 0 23px;padding:7px;border:0}.workspace-avatar{width:37px;height:37px}.side-nav{width:100%;align-items:center}.nav-item{justify-content:center;width:44px;padding:0;font-size:0}.nav-item svg{width:19px;height:19px}.sidebar-help,.profile-copy,.profile-menu{display:none}.profile-row{justify-content:center;padding-top:13px}.main-content{margin-left:68px}.dashboard-grid{grid-template-columns:1fr}.products-panel{min-height:auto}.product-row{min-height:54px}.filter-title{min-width:160px}}
 @media(max-width:650px){.sidebar{display:none}.main-content{margin:0}.topbar{height:55px;padding:0 17px}.today-chip{display:none}.content-wrap{padding:23px 15px 20px}.page-heading{align-items:flex-start;margin-bottom:18px}.page-heading h1{font-size:21px}.page-heading p{font-size:11px;max-width:255px;line-height:1.5}.heading-actions .secondary-button{font-size:0;width:36px;padding:0;justify-content:center}.heading-actions .secondary-button svg{width:17px}.filter-bar{height:auto;min-height:67px;padding:11px;flex-wrap:wrap;gap:10px}.filter-title{min-width:0;flex:1}.date-controls{width:100%;order:3;display:grid;grid-template-columns:1fr 12px 1fr auto;gap:6px}.date-controls label{display:flex;flex-direction:column;align-items:flex-start;gap:4px}.date-controls input{width:100%;height:34px}.date-separator{display:none}.date-apply{height:34px;margin:14px 0 0;padding:0 11px}.filter-export{margin:0}.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:12px}.metric-card{min-height:111px;padding:12px 11px}.metric-top{font-size:10px}.metric-icon{width:27px;height:27px}.metric-value{font-size:17px;margin:9px 0 6px}.metric-note{font-size:8px}.dashboard-grid{gap:11px;margin-bottom:12px}.trend-panel,.products-panel,.recent-panel{padding:15px 12px}.panel-header h2{font-size:12px}.panel-header p{font-size:9px}.panel-actions{gap:8px}.legend{font-size:9px}.interval-select{font-size:9px;height:26px}.sales-chart{height:190px}.chart-wrap{margin-top:10px}.recent-panel .panel-header{margin-bottom:10px}table{min-width:550px}.page-footer{gap:9px;flex-wrap:wrap;line-height:1.5}.page-footer span:nth-child(2){order:3;width:100%}.auth-shell{grid-template-columns:1fr;min-height:100vh}.auth-visual{display:none}.auth-panel{padding:28px 25px;min-height:100vh;place-items:center}.auth-form{max-width:390px}.mobile-brand{display:flex;margin-bottom:53px;padding:0}.mobile-brand .brand-mark{width:32px;height:32px}.auth-form h2{font-size:23px}}
+
+.sidebar-bottom{position:relative}
+.profile-popover{position:absolute;z-index:10;left:0;right:0;bottom:62px;padding:5px;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 30px #1b34251a}
+.profile-popover button{width:100%;height:37px;padding:0 10px;border:0;border-radius:6px;background:transparent;text-align:left;color:#40534a;font-size:11px;font-weight:600}
+.profile-popover button:hover{background:#f3f7f4}
+.profile-popover .profile-signout{border-top:1px solid var(--line);border-radius:0 0 6px 6px;margin-top:4px;padding-top:4px;color:#a74438}
+.topbar-right{position:relative}
+.topbar-account-popover{left:auto;right:0;bottom:auto;top:43px;width:180px}
+.top-avatar-button{padding:0;border:0;cursor:pointer}
+.account-modal-backdrop{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px;background:#10251db3}
+.account-modal{width:min(100%,430px);padding:24px;background:#fff;border-radius:12px;box-shadow:0 24px 70px #10251d40}
+.account-modal-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+.account-modal-header .eyebrow{display:block;margin-bottom:7px}
+.account-modal-header h2{margin:0;color:var(--ink);font:700 22px Manrope,sans-serif;letter-spacing:-.5px}
+.account-close{width:30px;height:30px;border:0;border-radius:6px;background:#f3f6f4;color:#6e7d74;font-size:20px;line-height:1}
+.account-profile-summary{display:flex;align-items:center;gap:12px;padding:15px;border-radius:9px;background:#f5f8f6}
+.account-avatar{width:42px;height:42px;display:grid;place-items:center;border-radius:50%;background:#e3f1e8;color:#24764f;font-weight:700}
+.account-profile-summary div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.account-profile-summary strong{font-size:13px;color:#2b4136}
+.account-profile-summary small{font-size:11px;color:#839088;overflow-wrap:anywhere}
+.account-details{margin:14px 0 0}
+.account-details div{display:flex;justify-content:space-between;gap:18px;padding:12px 2px;border-bottom:1px solid #edf1ef}
+.account-details dt{color:#829087;font-size:11px}
+.account-details dd{margin:0;color:#34483d;font-size:11px;font-weight:600;text-align:right;overflow-wrap:anywhere}
+.account-panel-intro,.account-settings-note{margin:0;color:#78877f;font-size:11px;line-height:1.6}
+.account-settings-note{margin-top:15px;padding:11px 12px;border-radius:7px;background:#f5f8f6}
+@media(max-width:900px) and (min-width:651px){.profile-popover{left:56px;right:auto;bottom:0;width:205px}}
