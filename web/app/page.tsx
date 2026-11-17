@@ -895,7 +895,6 @@ export default function Home() {
   }
 
   async function removeProduct(product: InventoryProduct) {
-    if (!window.confirm(`Remove "${product.name}" from this workspace? Products used in sales will be deactivated to preserve their history.`)) return;
     setRecordsError("");
     try {
       const response = await request(`/api/v1/products/${product.id}`, { method: "DELETE" });
@@ -910,7 +909,6 @@ export default function Home() {
   }
 
   async function removeCustomer(customer: Customer) {
-    if (!window.confirm(`Delete customer "${customer.name}"? Past sales will remain, without this customer link.`)) return;
     setRecordsError("");
     try {
       await request(`/api/v1/customers/${customer.id}`, { method: "DELETE" });
@@ -956,7 +954,6 @@ export default function Home() {
   }, [auth, sales, request, addToast]);
 
   async function removeSale(sale: Sale) {
-    if (!window.confirm(`Delete order #${String(sale.id).padStart(5, "0")} from sales and analytics? Items will be returned to stock.`)) return;
     setError("");
     try {
       await request(`/api/v1/sales/${sale.id}`, { method: "DELETE" });
