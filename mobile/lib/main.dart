@@ -2,58 +2,170 @@ import 'package:flutter/material.dart';
 
 import 'smartbiz_api.dart';
 
-const _green = Color(0xFF17845C);
-const _ink = Color(0xFF1D342B);
-const _muted = Color(0xFF829087);
-const _canvas = Color(0xFFF6F8F7);
+// Brand Accent Colors
+const _green = Color(0xFF059669);
+const _greenDark = Color(0xFF10B981);
+const _inkLight = Color(0xFF0F172A);
+const _inkDark = Color(0xFFF4F4F5);
+const _mutedLight = Color(0xFF64748B);
+const _mutedDark = Color(0xFF94A3B8);
+
+// Theme State Controller
+final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
 
 void main() => runApp(const SmartBizApp());
 
 class SmartBizApp extends StatelessWidget {
   const SmartBizApp({super.key});
 
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'SmartBiz',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      scaffoldBackgroundColor: _canvas,
-      colorScheme: ColorScheme.fromSeed(seedColor: _green, primary: _green),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        titleTextStyle: TextStyle(
-          color: _ink,
-          fontSize: 19,
-          fontWeight: FontWeight.w700,
-        ),
-        iconTheme: IconThemeData(color: _ink),
+  static ThemeData get lightTheme => ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+    colorScheme: const ColorScheme.light(
+      primary: _green,
+      onPrimary: Colors.white,
+      secondary: _green,
+      surface: Colors.white,
+      onSurface: _inkLight,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      titleTextStyle: TextStyle(
+        color: _inkLight,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFFF9FBFA),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 13,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE5ECE8)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFE5ECE8)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _green, width: 1.4),
-        ),
-        labelStyle: const TextStyle(color: _muted, fontSize: 13),
+      iconTheme: IconThemeData(color: _inkLight),
+    ),
+    cardTheme: CardTheme(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
       ),
     ),
-    home: const SignInPage(),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _green, width: 1.8),
+      ),
+      labelStyle: const TextStyle(color: _mutedLight, fontSize: 13.5),
+      prefixIconColor: _mutedLight,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: Colors.white,
+      indicatorColor: const Color(0xFFECFDF5),
+      elevation: 0,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: states.contains(WidgetState.selected) ? _green : _mutedLight,
+        ),
+      ),
+    ),
   );
+
+  static ThemeData get darkTheme => ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: const Color(0xFF09090B),
+    colorScheme: const ColorScheme.dark(
+      primary: _greenDark,
+      onPrimary: Color(0xFF09090B),
+      secondary: _greenDark,
+      surface: Color(0xFF18181B),
+      onSurface: _inkDark,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF121215),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      titleTextStyle: TextStyle(
+        color: _inkDark,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+      ),
+      iconTheme: IconThemeData(color: _inkDark),
+    ),
+    cardTheme: CardTheme(
+      color: const Color(0xFF18181B),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF27272A)),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF18181B),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF27272A)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF27272A)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _greenDark, width: 1.8),
+      ),
+      labelStyle: const TextStyle(color: _mutedDark, fontSize: 13.5),
+      prefixIconColor: _mutedDark,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: const Color(0xFF121215),
+      indicatorColor: const Color(0x2810B981),
+      elevation: 0,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? _greenDark
+              : _mutedDark,
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (context, themeMode, _) => MaterialApp(
+        title: 'SmartBiz',
+        debugShowCheckedModeBanner: false,
+        theme: lightTheme,
+        darkTheme: darkTheme,
+        themeMode: themeMode,
+        home: const SignInPage(),
+      ),
+    );
+  }
 }
 
 String _money(dynamic minor, String currency) {
@@ -137,198 +249,240 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 28),
-                Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: _green,
-                        borderRadius: BorderRadius.circular(13),
-                      ),
-                      child: const Icon(
-                        Icons.grid_view_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'smart',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 23,
-                        color: _ink,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    const Text(
-                      'biz',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 23,
-                        color: _green,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 46),
-                Text(
-                  _register ? 'Set up your business' : 'Welcome back',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 27,
-                    color: _ink,
-                    letterSpacing: -.6,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _register
-                      ? 'Create an account to start managing sales.'
-                      : 'Sign in to see your sales and inventory.',
-                  style: const TextStyle(color: _muted, height: 1.45),
-                ),
-                const SizedBox(height: 28),
-                Form(
-                  key: _formKey,
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Theme toggle button in corner
+            Positioned(
+              top: 12,
+              right: 16,
+              child: IconButton(
+                tooltip: 'Toggle Theme',
+                icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+                onPressed: () {
+                  themeModeNotifier.value =
+                      isDark ? ThemeMode.light : ThemeMode.dark;
+                },
+              ),
+            ),
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(26),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (_register) ...[
-                        TextFormField(
-                          controller: _name,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Full name',
-                            prefixIcon: Icon(Icons.person_outline),
+                      const SizedBox(height: 16),
+                      // Brand Mark
+                      Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: primaryColor.withValues(alpha: 0.25),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.grid_view_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty
-                              ? 'Enter your name'
-                              : null,
-                        ),
-                        const SizedBox(height: 13),
-                        TextFormField(
-                          controller: _business,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            labelText: 'Business name',
-                            prefixIcon: Icon(Icons.storefront_outlined),
+                          const SizedBox(width: 12),
+                          Text(
+                            'smart',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 25,
+                              color: inkColor,
+                              letterSpacing: -1,
+                            ),
                           ),
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty
-                              ? 'Enter a business name'
-                              : null,
-                        ),
-                        const SizedBox(height: 13),
-                      ],
-                      TextFormField(
-                        controller: _email,
-                        keyboardType: TextInputType.emailAddress,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Email address',
-                          prefixIcon: Icon(Icons.alternate_email),
-                        ),
-                        validator: (value) =>
-                            value == null || !value.contains('@')
-                            ? 'Enter a valid email address'
-                            : null,
+                          Text(
+                            'biz',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 25,
+                              color: primaryColor,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 13),
-                      TextFormField(
-                        controller: _password,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
+                      const SizedBox(height: 38),
+                      Text(
+                        _register ? 'Launch your workspace' : 'Welcome back',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 28,
+                          color: inkColor,
+                          letterSpacing: -0.6,
                         ),
-                        validator: (value) =>
-                            value == null || value.length < (_register ? 8 : 1)
-                            ? (_register
-                                  ? 'Use at least 8 characters'
-                                  : 'Enter your password')
-                            : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _register
+                            ? 'Create your business account to start capturing sales.'
+                            : 'Sign in to access your sales, catalog, and analytics.',
+                        style: TextStyle(
+                          color: mutedColor,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            if (_register) ...[
+                              TextFormField(
+                                controller: _name,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: const InputDecoration(
+                                  labelText: 'Full name',
+                                  prefixIcon: Icon(Icons.person_outline),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                    ? 'Enter your name'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _business,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: const InputDecoration(
+                                  labelText: 'Business name',
+                                  prefixIcon: Icon(Icons.storefront_outlined),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                    ? 'Enter a business name'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            TextFormField(
+                              controller: _email,
+                              keyboardType: TextInputType.emailAddress,
+                              autocorrect: false,
+                              decoration: const InputDecoration(
+                                labelText: 'Email address',
+                                prefixIcon: Icon(Icons.alternate_email),
+                              ),
+                              validator: (value) =>
+                                  value == null || !value.contains('@')
+                                  ? 'Enter a valid email address'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _password,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline),
+                              ),
+                              validator: (value) =>
+                                  value == null || value.length < (_register ? 8 : 1)
+                                  ? (_register
+                                        ? 'Use at least 8 characters'
+                                        : 'Enter your password')
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        _ErrorBanner(message: _error!),
+                      ],
+                      const SizedBox(height: 22),
+                      FilledButton(
+                        onPressed: _loading ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 1,
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                _register ? 'Create account' : 'Sign in',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 18),
+                      TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () => setState(() {
+                                _register = !_register;
+                                _error = null;
+                              }),
+                        child: Text(
+                          _register
+                              ? 'Already have an account? Sign in'
+                              : 'New to SmartBiz? Create an account',
+                          style: TextStyle(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.shield_outlined, size: 15, color: mutedColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Encrypted session token stored locally',
+                            style: TextStyle(color: mutedColor, fontSize: 12),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 14),
-                  _ErrorBanner(message: _error!),
-                ],
-                const SizedBox(height: 18),
-                FilledButton(
-                  onPressed: _loading ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _green,
-                    minimumSize: const Size.fromHeight(50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _loading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _register ? 'Create account' : 'Sign in',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                ),
-                const SizedBox(height: 17),
-                TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () => setState(() {
-                          _register = !_register;
-                          _error = null;
-                        }),
-                  child: Text(
-                    _register
-                        ? 'Already have an account? Sign in'
-                        : 'New to SmartBiz? Create an account',
-                    style: const TextStyle(
-                      color: _green,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 34),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.lock_outline, size: 14, color: _muted),
-                    SizedBox(width: 6),
-                    Text(
-                      'Your session stays on this device only',
-                      style: TextStyle(color: _muted, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class SmartBizHome extends StatefulWidget {
@@ -400,6 +554,10 @@ class _SmartBizHomeState extends State<SmartBizHome> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+
     final pages = [
       _OverviewTab(
         summary: _summary,
@@ -425,57 +583,79 @@ class _SmartBizHomeState extends State<SmartBizHome> {
         onSaved: _refresh,
       ),
     ];
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
           children: [
             Container(
-              width: 31,
-              height: 31,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF5EF),
-                borderRadius: BorderRadius.circular(9),
+                color: primaryColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.grid_view_rounded,
-                color: _green,
-                size: 17,
+                color: primaryColor,
+                size: 18,
               ),
             ),
-            const SizedBox(width: 9),
-            const Text(
-              'SmartBiz',
+            const SizedBox(width: 10),
+            Text(
+              widget.business['name'] as String? ?? 'SmartBiz',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
-                color: _ink,
+                color: inkColor,
+                letterSpacing: -0.3,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
+            tooltip: 'Toggle Theme',
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              size: 20,
+            ),
+            onPressed: () {
+              themeModeNotifier.value =
+                  isDark ? ThemeMode.light : ThemeMode.dark;
+            },
+          ),
+          IconButton(
             tooltip: 'Refresh',
             onPressed: _loading ? null : _refresh,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(Icons.refresh_rounded, size: 21),
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'logout') _signOut();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'logout', child: Text('Sign out')),
+              PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 18, color: Colors.redAccent),
+                    SizedBox(width: 10),
+                    Text('Sign out', style: TextStyle(color: Colors.redAccent)),
+                  ],
+                ),
+              ),
             ],
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFFE7EDF6),
+                backgroundColor: primaryColor.withValues(alpha: 0.15),
                 child: Text(
                   _initials(widget.user['full_name'] as String? ?? 'SB'),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF526B8A),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: primaryColor,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -501,8 +681,6 @@ class _SmartBizHomeState extends State<SmartBizHome> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (value) => setState(() => _tab = value),
-        backgroundColor: Colors.white,
-        indicatorColor: const Color(0xFFEAF5EF),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.space_dashboard_outlined),
@@ -549,105 +727,111 @@ class _OverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
     return RefreshIndicator(
       onRefresh: () async => onRetry(),
+      color: primaryColor,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 21, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
         children: [
           Text(
-            'OVERVIEW',
+            'EXECUTIVE OVERVIEW',
             style: TextStyle(
-              color: _green,
-              fontSize: 10,
+              color: primaryColor,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
+              letterSpacing: 1.2,
             ),
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 6),
           Text(
-            'Good day, ${userName.split(' ').first}',
-            style: const TextStyle(
-              fontSize: 23,
+            'Welcome, ${userName.split(' ').first} ✦',
+            style: TextStyle(
+              fontSize: 24,
               fontWeight: FontWeight.w800,
-              color: _ink,
-              letterSpacing: -.5,
+              color: inkColor,
+              letterSpacing: -0.6,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
           Text(
-            'Here’s how $businessName is doing.',
-            style: const TextStyle(color: _muted, fontSize: 12),
+            'Performance summary for $businessName.',
+            style: TextStyle(color: mutedColor, fontSize: 13),
           ),
           const SizedBox(height: 20),
           Row(
             children: [
               Expanded(
                 child: _MetricCard(
-                  title: 'Revenue',
+                  title: 'Total Revenue',
                   value: _money(summary['revenue_minor'], currency),
                   icon: Icons.trending_up,
-                  tint: const Color(0xFFEAF5EF),
+                  tone: _MetricTone.green,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: _MetricCard(
-                  title: 'Orders',
+                  title: 'Total Orders',
                   value: '${summary['order_count'] ?? '—'}',
                   icon: Icons.shopping_bag_outlined,
-                  tint: const Color(0xFFEEF3FA),
+                  tone: _MetricTone.blue,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _MetricCard(
-                  title: 'Avg. order',
+                  title: 'Avg. Order Value',
                   value: _money(summary['average_order_value_minor'], currency),
                   icon: Icons.receipt_long_outlined,
-                  tint: const Color(0xFFFBF3E9),
+                  tone: _MetricTone.amber,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: _MetricCard(
-                  title: 'Stock on hand',
+                  title: 'Catalog Stock',
                   value:
                       '${products.fold<int>(0, (sum, item) => sum + ((item['stock_quantity'] as num?)?.toInt() ?? 0))}',
                   icon: Icons.inventory_2_outlined,
-                  tint: const Color(0xFFF2EFF8),
+                  tone: _MetricTone.purple,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           _SectionCard(
-            title: 'Sales trend',
-            subtitle: 'Revenue · last 30 days',
+            title: 'Revenue Trajectory',
+            subtitle: 'Last 30 days performance',
             trailing: loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: primaryColor),
                   )
                 : null,
             child: SizedBox(
-              height: 155,
+              height: 165,
               child: trend.isEmpty
                   ? const _EmptyMessage('Sales activity will appear here')
                   : CustomPaint(
-                      painter: _TrendPainter(trend),
+                      painter: _TrendPainter(trend, isDark: isDark),
                       child: const SizedBox.expand(),
                     ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           _SectionCard(
-            title: 'Recent sales',
-            subtitle: 'Latest completed orders',
+            title: 'Recent Transactions',
+            subtitle: 'Latest orders recorded in workspace',
             child: sales.isEmpty
                 ? const _EmptyMessage('No sales in the last 30 days')
                 : Column(
@@ -658,9 +842,9 @@ class _OverviewTab extends StatelessWidget {
                   ),
           ),
           if (loading && summary.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(22),
-              child: Center(child: CircularProgressIndicator(color: _green)),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator(color: primaryColor)),
             ),
         ],
       ),
@@ -668,7 +852,7 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
-class _InventoryTab extends StatelessWidget {
+class _InventoryTab extends StatefulWidget {
   const _InventoryTab({
     required this.products,
     required this.currency,
@@ -681,115 +865,191 @@ class _InventoryTab extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-    onRefresh: () async => onRetry(),
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 24),
-      children: [
-        const Text(
-          'INVENTORY',
-          style: TextStyle(
-            color: _green,
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.4,
-          ),
-        ),
-        const SizedBox(height: 7),
-        const Text(
-          'Products & stock',
-          style: TextStyle(
-            fontSize: 23,
-            fontWeight: FontWeight.w800,
-            color: _ink,
-            letterSpacing: -.5,
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          '${products.length} products in your catalog',
-          style: const TextStyle(color: _muted, fontSize: 12),
-        ),
-        const SizedBox(height: 18),
-        if (loading && products.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(25),
-            child: Center(child: CircularProgressIndicator(color: _green)),
-          ),
-        if (!loading && products.isEmpty)
-          const _EmptyMessage('Your product catalog is empty'),
-        ...products.map((product) {
-          final stock = (product['stock_quantity'] as num? ?? 0).toInt();
-          final active = product['active'] as bool? ?? true;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 9),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE9EEEB)),
+  State<_InventoryTab> createState() => _InventoryTabState();
+}
+
+class _InventoryTabState extends State<_InventoryTab> {
+  String _search = '';
+  String _filter = 'all'; // all, active, low_stock
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
+    final filtered = widget.products.where((p) {
+      final name = (p['name'] as String? ?? '').toLowerCase();
+      final sku = (p['sku'] as String? ?? '').toLowerCase();
+      final q = _search.toLowerCase().trim();
+      final matchesSearch = q.isEmpty || name.contains(q) || sku.contains(q);
+      if (!matchesSearch) return false;
+
+      final stock = (p['stock_quantity'] as num? ?? 0).toInt();
+      final active = p['active'] as bool? ?? true;
+      if (_filter == 'active') return active;
+      if (_filter == 'low_stock') return stock <= 5;
+      return true;
+    }).toList();
+
+    return RefreshIndicator(
+      onRefresh: () async => widget.onRetry(),
+      color: primaryColor,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        children: [
+          Text(
+            'CATALOG & STOCK',
+            style: TextStyle(
+              color: primaryColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
             ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Inventory Tracker',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: inkColor,
+              letterSpacing: -0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.products.length} products available in this workspace',
+            style: TextStyle(color: mutedColor, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          // Search Bar
+          TextField(
+            onChanged: (val) => setState(() => _search = val),
+            decoration: InputDecoration(
+              hintText: 'Search products or SKU...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _search.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() => _search = ''),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF5EF),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.inventory_2_outlined,
-                    color: _green,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product['name'] as String? ?? 'Product',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'SKU ${product['sku'] ?? '—'}',
-                        style: const TextStyle(color: _muted, fontSize: 10),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildFilterChip('All (${widget.products.length})', 'all', primaryColor),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      _money(product['price_minor'], currency),
-                      style: const TextStyle(
-                        color: _ink,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    _StockBadge(stock: stock, active: active),
-                  ],
-                ),
+                _buildFilterChip('Active only', 'active', primaryColor),
+                const SizedBox(width: 8),
+                _buildFilterChip('Low stock (≤5)', 'low_stock', primaryColor),
               ],
             ),
-          );
-        }),
-      ],
-    ),
-  );
+          ),
+          const SizedBox(height: 14),
+          if (widget.loading && widget.products.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator(color: primaryColor)),
+            ),
+          if (!widget.loading && filtered.isEmpty)
+            const _EmptyMessage('No matching products found'),
+          ...filtered.map((product) {
+            final stock = (product['stock_quantity'] as num? ?? 0).toInt();
+            final active = product['active'] as bool? ?? true;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.inventory_2_outlined,
+                        color: primaryColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product['name'] as String? ?? 'Product',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: inkColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'SKU: ${product['sku'] ?? '—'}',
+                            style: TextStyle(
+                              color: mutedColor,
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _money(product['price_minor'], widget.currency),
+                          style: TextStyle(
+                            color: inkColor,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        _StockBadge(stock: stock, active: active),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value, Color primaryColor) {
+    final selected = _filter == value;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() => _filter = value),
+      selectedColor: primaryColor.withValues(alpha: 0.18),
+      checkmarkColor: primaryColor,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        color: selected ? primaryColor : null,
+      ),
+    );
+  }
 }
 
 class _NewSaleTab extends StatefulWidget {
@@ -810,6 +1070,7 @@ class _NewSaleTab extends StatefulWidget {
 
 class _NewSaleTabState extends State<_NewSaleTab> {
   final Map<int, int> _quantities = {};
+  String _search = '';
   bool _saving = false;
   String? _error;
 
@@ -818,6 +1079,8 @@ class _NewSaleTabState extends State<_NewSaleTab> {
     final price = (product['price_minor'] as num).toInt();
     return sum + price * (_quantities[id] ?? 0);
   });
+
+  int get _itemCount => _quantities.values.fold(0, (sum, q) => sum + q);
 
   Future<void> _save() async {
     setState(() {
@@ -831,8 +1094,8 @@ class _NewSaleTabState extends State<_NewSaleTab> {
       widget.onSaved();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Sale recorded successfully'),
-          backgroundColor: _green,
+          content: Text('Sale recorded successfully! Stock deducted.'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (error) {
@@ -844,153 +1107,181 @@ class _NewSaleTabState extends State<_NewSaleTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
     final available = widget.products
         .where(
           (item) =>
               item['active'] == true &&
               ((item['stock_quantity'] as num?)?.toInt() ?? 0) > 0,
         )
+        .where((item) {
+          final q = _search.toLowerCase().trim();
+          if (q.isEmpty) return true;
+          final name = (item['name'] as String? ?? '').toLowerCase();
+          return name.contains(q);
+        })
         .toList();
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 25),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 25),
       children: [
-        const Text(
-          'CHECKOUT',
+        Text(
+          'CHECKOUT REGISTER',
           style: TextStyle(
-            color: _green,
-            fontSize: 10,
+            color: primaryColor,
+            fontSize: 11,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.4,
+            letterSpacing: 1.2,
           ),
         ),
-        const SizedBox(height: 7),
-        const Text(
-          'Record a sale',
+        const SizedBox(height: 6),
+        Text(
+          'Record New Sale',
           style: TextStyle(
-            fontSize: 23,
+            fontSize: 24,
             fontWeight: FontWeight.w800,
-            color: _ink,
-            letterSpacing: -.5,
+            color: inkColor,
+            letterSpacing: -0.6,
           ),
         ),
-        const SizedBox(height: 5),
-        const Text(
-          'Choose products and quantities to check out.',
-          style: TextStyle(color: _muted, fontSize: 12),
+        const SizedBox(height: 4),
+        Text(
+          'Add items to cart and check out instantly.',
+          style: TextStyle(color: mutedColor, fontSize: 13),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 16),
+        TextField(
+          onChanged: (val) => setState(() => _search = val),
+          decoration: const InputDecoration(
+            hintText: 'Filter items for sale...',
+            prefixIcon: Icon(Icons.search, size: 20),
+          ),
+        ),
+        const SizedBox(height: 14),
         if (available.isEmpty)
-          const _EmptyMessage('No in stock products available'),
+          const _EmptyMessage('No in-stock products available'),
         ...available.map((product) {
           final id = (product['id'] as num).toInt();
           final quantity = _quantities[id] ?? 0;
           final stock = (product['stock_quantity'] as num).toInt();
-          return Container(
-            margin: const EdgeInsets.only(bottom: 9),
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: const Color(0xFFE9EEEB)),
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.shopping_bag_outlined,
+                      color: primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product['name'] as String,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: inkColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_money(product['price_minor'], widget.currency)} · $stock in stock',
+                          style: TextStyle(color: mutedColor, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _QuantityControl(
+                    value: quantity,
+                    max: stock,
+                    onChanged: (value) => setState(
+                      () => _quantities[id] = value.clamp(0, stock).toInt(),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          );
+        }),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          _ErrorBanner(message: _error!),
+        ],
+        const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
             child: Row(
               children: [
-                Container(
-                  width: 39,
-                  height: 39,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F6F3),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                  child: const Icon(
-                    Icons.shopping_bag_outlined,
-                    color: _green,
-                    size: 19,
-                  ),
-                ),
-                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        product['name'] as String,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _ink,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
+                        'Total Order Value',
+                        style: TextStyle(color: mutedColor, fontSize: 13),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(
-                        '${_money(product['price_minor'], widget.currency)} · $stock available',
-                        style: const TextStyle(color: _muted, fontSize: 10),
+                        '$_itemCount ${_itemCount == 1 ? "unit" : "units"} selected',
+                        style: TextStyle(color: primaryColor, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
                 ),
-                _QuantityControl(
-                  value: quantity,
-                  onChanged: (value) => setState(
-                    () => _quantities[id] = value.clamp(0, stock).toInt(),
+                Text(
+                  _money(_total, widget.currency),
+                  style: TextStyle(
+                    color: inkColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
                   ),
                 ),
               ],
             ),
-          );
-        }),
-        if (_error != null) ...[
-          const SizedBox(height: 7),
-          _ErrorBanner(message: _error!),
-        ],
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: const Color(0xFFE9EEEB)),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Total',
-                  style: TextStyle(color: _muted, fontSize: 13),
-                ),
-              ),
-              Text(
-                _money(_total, widget.currency),
-                style: const TextStyle(
-                  color: _ink,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
-              ),
-            ],
           ),
         ),
-        const SizedBox(height: 11),
+        const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: _saving || _total == 0 ? null : _save,
           icon: _saving
               ? const SizedBox(
-                  width: 17,
-                  height: 17,
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
                     color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.check_rounded),
-          label: Text(_saving ? 'Saving sale…' : 'Complete sale'),
+              : const Icon(Icons.check_circle_outline),
+          label: Text(
+            _saving ? 'Recording sale…' : 'Complete Sale & Deduct Stock',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           style: FilledButton.styleFrom(
-            backgroundColor: _green,
-            minimumSize: const Size.fromHeight(50),
+            backgroundColor: primaryColor,
+            minimumSize: const Size.fromHeight(52),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         ),
@@ -1000,96 +1291,138 @@ class _NewSaleTabState extends State<_NewSaleTab> {
 }
 
 class _QuantityControl extends StatelessWidget {
-  const _QuantityControl({required this.value, required this.onChanged});
+  const _QuantityControl({required this.value, required this.max, required this.onChanged});
   final int value;
+  final int max;
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      IconButton.filledTonal(
-        onPressed: value > 0 ? () => onChanged(value - 1) : null,
-        icon: const Icon(Icons.remove, size: 16),
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0xFFF1F5F2),
-          foregroundColor: _green,
-          disabledBackgroundColor: const Color(0xFFF7F8F7),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton.filledTonal(
+          onPressed: value > 0 ? () => onChanged(value - 1) : null,
+          icon: const Icon(Icons.remove, size: 16),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            foregroundColor: primaryColor,
+          ),
         ),
-      ),
-      SizedBox(
-        width: 28,
-        child: Text(
-          '$value',
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w700, color: _ink),
+        SizedBox(
+          width: 32,
+          child: Text(
+            '$value',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: inkColor,
+            ),
+          ),
         ),
-      ),
-      IconButton.filledTonal(
-        onPressed: () => onChanged(value + 1),
-        icon: const Icon(Icons.add, size: 16),
-        visualDensity: VisualDensity.compact,
-        style: IconButton.styleFrom(
-          backgroundColor: const Color(0xFFEAF5EF),
-          foregroundColor: _green,
+        IconButton.filledTonal(
+          onPressed: value < max ? () => onChanged(value + 1) : null,
+          icon: const Icon(Icons.add, size: 16),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            foregroundColor: primaryColor,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
+
+enum _MetricTone { green, blue, amber, purple }
 
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.title,
     required this.value,
     required this.icon,
-    required this.tint,
+    required this.tone,
   });
   final String title;
   final String value;
   final IconData icon;
-  final Color tint;
+  final _MetricTone tone;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFFE9EEEB)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: tint,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(icon, size: 17, color: _green),
-        ),
-        const SizedBox(height: 12),
-        Text(title, style: const TextStyle(color: _muted, fontSize: 10)),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            value,
-            style: const TextStyle(
-              color: _ink,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-              letterSpacing: -.3,
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
+    Color iconColor;
+    Color iconBg;
+
+    switch (tone) {
+      case _MetricTone.green:
+        iconColor = isDark ? _greenDark : _green;
+        iconBg = iconColor.withValues(alpha: 0.14);
+        break;
+      case _MetricTone.blue:
+        iconColor = const Color(0xFF3B82F6);
+        iconBg = iconColor.withValues(alpha: 0.14);
+        break;
+      case _MetricTone.amber:
+        iconColor = const Color(0xFFF59E0B);
+        iconBg = iconColor.withValues(alpha: 0.14);
+        break;
+      case _MetricTone.purple:
+        iconColor = const Color(0xFF8B5CF6);
+        iconBg = iconColor.withValues(alpha: 0.14);
+        break;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
             ),
-          ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              style: TextStyle(
+                color: mutedColor,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: inkColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 20,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _SectionCard extends StatelessWidget {
@@ -1105,47 +1438,50 @@ class _SectionCard extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(15),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: const Color(0xFFE9EEEB)),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: _ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: inkColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: TextStyle(color: mutedColor, fontSize: 12),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: _muted, fontSize: 10),
-                  ),
-                ],
-              ),
+                ),
+                if (trailing != null) trailing!,
+              ],
             ),
-            if (trailing != null) trailing!,
+            const SizedBox(height: 14),
+            child,
           ],
         ),
-        const SizedBox(height: 12),
-        child,
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _SaleRow extends StatelessWidget {
@@ -1155,6 +1491,11 @@ class _SaleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = isDark ? _greenDark : _green;
+    final inkColor = isDark ? _inkDark : _inkLight;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
     final items = (sale['items'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
     final names = items
@@ -1166,34 +1507,36 @@ class _SaleRow extends StatelessWidget {
     final when = date == null
         ? 'Recently'
         : '${date.day}/${date.month} · ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F6F3),
+              color: primaryColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.receipt_long_outlined,
-              color: _green,
-              size: 17,
+              color: primaryColor,
+              size: 18,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '#${sale['id']}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: _ink,
+                  '#${String(sale['id']).padLeft(5, '0')}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: inkColor,
                     fontWeight: FontWeight.w700,
+                    fontFamily: 'monospace',
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -1201,7 +1544,7 @@ class _SaleRow extends StatelessWidget {
                   names.isEmpty ? 'Sale' : names,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: _muted),
+                  style: TextStyle(fontSize: 12, color: mutedColor),
                 ),
               ],
             ),
@@ -1211,14 +1554,14 @@ class _SaleRow extends StatelessWidget {
             children: [
               Text(
                 _money(sale['total_minor'], currency),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: _ink,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: inkColor,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 3),
-              Text(when, style: const TextStyle(fontSize: 9, color: _muted)),
+              Text(when, style: TextStyle(fontSize: 11, color: mutedColor)),
             ],
           ),
         ],
@@ -1234,6 +1577,7 @@ class _StockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final low = stock <= 5;
     final text = !active
         ? 'Inactive'
@@ -1242,22 +1586,24 @@ class _StockBadge extends StatelessWidget {
         : low
         ? '$stock left'
         : '$stock in stock';
-    final color = !active || stock == 0
-        ? const Color(0xFFB94E43)
+
+    final Color badgeColor = !active || stock == 0
+        ? const Color(0xFFEF4444)
         : low
-        ? const Color(0xFFB17A33)
-        : _green;
+        ? const Color(0xFFF59E0B)
+        : (isDark ? _greenDark : _green);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: .09),
+        color: badgeColor.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         text,
         style: TextStyle(
-          color: color,
-          fontSize: 9,
+          color: badgeColor,
+          fontSize: 11.5,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -1270,18 +1616,23 @@ class _EmptyMessage extends StatelessWidget {
   final String message;
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 100,
-    alignment: Alignment.center,
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.inbox_outlined, color: Colors.blueGrey.shade200, size: 25),
-        const SizedBox(height: 7),
-        Text(message, style: const TextStyle(color: _muted, fontSize: 11)),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark ? _mutedDark : _mutedLight;
+
+    return Container(
+      height: 110,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.inbox_outlined, color: mutedColor.withValues(alpha: 0.5), size: 28),
+          const SizedBox(height: 8),
+          Text(message, style: TextStyle(color: mutedColor, fontSize: 13)),
+        ],
+      ),
+    );
+  }
 }
 
 class _ErrorBanner extends StatelessWidget {
@@ -1291,43 +1642,50 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
       color: const Color(0xFFFFF1EE),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFFECDD3)),
     ),
     child: Row(
       children: [
-        const Icon(Icons.error_outline, size: 17, color: Color(0xFFA64435)),
-        const SizedBox(width: 8),
+        const Icon(Icons.error_outline, size: 18, color: Color(0xFFE11D48)),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(
             message,
-            style: const TextStyle(color: Color(0xFFA64435), fontSize: 11),
+            style: const TextStyle(color: Color(0xFFBE123C), fontSize: 12.5),
           ),
         ),
         if (onRetry != null)
-          TextButton(onPressed: onRetry, child: const Text('Retry')),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('Retry', style: TextStyle(color: Color(0xFFBE123C), fontWeight: FontWeight.bold)),
+          ),
       ],
     ),
   );
 }
 
 class _TrendPainter extends CustomPainter {
-  _TrendPainter(this.values);
+  _TrendPainter(this.values, {required this.isDark});
   final List<Map<String, dynamic>> values;
+  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const left = 8.0, right = 4.0, top = 12.0, bottom = 10.0;
+    const left = 8.0, right = 4.0, top = 14.0, bottom = 12.0;
     final chartWidth = size.width - left - right;
     final chartHeight = size.height - top - bottom;
     final maxValue = values
         .map((item) => (item['revenue_minor'] as num? ?? 0).toDouble())
         .fold<double>(1, (a, b) => a > b ? a : b);
+
     final gridPaint = Paint()
-      ..color = const Color(0xFFEDF1EF)
+      ..color = isDark ? const Color(0xFF27272A) : const Color(0xFFE2E8F0)
       ..strokeWidth = 1;
+
     for (var line = 0; line < 4; line++) {
       final y = top + chartHeight * line / 3;
       canvas.drawLine(
@@ -1336,10 +1694,12 @@ class _TrendPainter extends CustomPainter {
         gridPaint,
       );
     }
+
     if (values.isEmpty) return;
+
     final points = <Offset>[];
     for (var index = 0; index < values.length; index++) {
-      final ratio = values.length == 1 ? .5 : index / (values.length - 1);
+      final ratio = values.length == 1 ? 0.5 : index / (values.length - 1);
       final amount = (values[index]['revenue_minor'] as num? ?? 0).toDouble();
       points.add(
         Offset(
@@ -1348,6 +1708,7 @@ class _TrendPainter extends CustomPainter {
         ),
       );
     }
+
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (var index = 1; index < points.length; index++) {
       final previous = points[index - 1];
@@ -1362,48 +1723,57 @@ class _TrendPainter extends CustomPainter {
         current.dy,
       );
     }
+
     final area = Path.from(path)
       ..lineTo(points.last.dx, size.height - bottom)
       ..lineTo(points.first.dx, size.height - bottom)
       ..close();
+
+    final primaryColor = isDark ? _greenDark : _green;
+
     canvas.drawPath(
       area,
       Paint()
-        ..shader = const LinearGradient(
-          colors: [Color(0x4434A979), Color(0x0034A979)],
+        ..shader = LinearGradient(
+          colors: [
+            primaryColor.withValues(alpha: 0.35),
+            primaryColor.withValues(alpha: 0.0),
+          ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ).createShader(Offset.zero & size),
     );
+
     canvas.drawPath(
       path,
       Paint()
-        ..color = _green
+        ..color = primaryColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.3
+        ..strokeWidth = 2.6
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
+
     for (final point in [
       points.first,
       points[points.length ~/ 2],
       points.last,
     ]) {
-      canvas.drawCircle(point, 3, Paint()..color = Colors.white);
+      canvas.drawCircle(point, 3.5, Paint()..color = isDark ? const Color(0xFF18181B) : Colors.white);
       canvas.drawCircle(
         point,
-        3,
+        3.5,
         Paint()
-          ..color = _green
+          ..color = primaryColor
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
+          ..strokeWidth = 2.0,
       );
     }
   }
 
   @override
   bool shouldRepaint(covariant _TrendPainter oldDelegate) =>
-      oldDelegate.values != values;
+      oldDelegate.values != values || oldDelegate.isDark != isDark;
 }
 
 String _friendlyError(Object error) {

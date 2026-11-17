@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app import models, schemas
 from app.emailing import EmailDeliveryError, send_business_invitation, send_email_verification
-from app.auth import ACCESS_TOKEN_TTL, create_access_token, decode_access_token, get_business_membership, get_current_user, hash_password, verify_password
+from app.auth import ACCESS_TOKEN_TTL, create_access_token, create_refresh_token, decode_access_token, decode_refresh_token, get_business_membership, get_current_user, hash_password, unauthorized_token, verify_password
 
 app = FastAPI(
     title="SmartBiz API",
@@ -69,6 +69,8 @@ def auth_response(user: models.User, db: Session) -> dict:
     ).all()
     return {
         "access_token": create_access_token(user.id),
+        "refresh_token": create_refresh_token(user.id),
+        "token_type": "bearer",
         "expires_in": int(ACCESS_TOKEN_TTL.total_seconds()),
         "user": user,
         "memberships": [{"business": membership.business, "role": membership.role} for membership in memberships],
@@ -230,6 +232,29 @@ def login(payload: schemas.LoginRequest, request: Request, db: Session = Depends
     return auth_response(user, db)
 
 
+@app.post("/api/v1/auth/refresh", response_model=schemas.AuthOut, tags=["authentication"])
+def refresh_token(payload: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
+    claims = decode_refresh_token(payload.refresh_token)
+    user_id = int(claims["sub"])
+    jti = claims["jti"]
+    user = db.get(models.User, user_id)
+    if user is None or not user.active or not user.email_verified:
+        raise unauthorized_token("Account inactive or unverified")
+    exp_timestamp = claims.get("exp")
+    expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc) if exp_timestamp else models.utc_now()
+    consumed = db.scalar(
+        pg_insert(models.TokenRevocation)
+        .values(token_id=jti, user_id=user.id, expires_at=expires_at)
+        .on_conflict_do_nothing(index_elements=[models.TokenRevocation.token_id])
+        .returning(models.TokenRevocation.token_id)
+    )
+    if consumed is None:
+        db.rollback()
+        raise unauthorized_token("Refresh token has already been used")
+    db.commit()
+    return auth_response(user, db)
+
+
 @app.post("/api/v1/auth/verify-email", status_code=204, tags=["authentication"])
 def verify_email(payload: schemas.EmailVerificationRequest, request: Request, db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request, db, "verify", "verification", 20)
@@ -308,6 +333,7 @@ def current_account(current_user: models.User = Depends(get_current_user), db: S
 
 @app.post("/api/v1/auth/logout", tags=["authentication"])
 def logout(
+    request_body: schemas.LogoutRequest | None = None,
     payload: dict = Depends(decode_access_token),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -319,6 +345,14 @@ def logout(
         user_id=current_user.id,
         expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
     ))
+    if request_body and request_body.refresh_token:
+        try:
+            claims = decode_refresh_token(request_body.refresh_token)
+        except HTTPException:
+            claims = None
+        if claims and int(claims["sub"]) == current_user.id:
+            exp = datetime.fromtimestamp(claims["exp"], tz=timezone.utc)
+            db.merge(models.TokenRevocation(token_id=claims["jti"], user_id=current_user.id, expires_at=exp))
     db.commit()
     return {"status": "logged_out"}
 
@@ -576,6 +610,44 @@ def delete_customer(customer_id: int, business: models.Business = Depends(requir
     return Response(status_code=204)
 
 
+@app.get("/api/v1/customers/{customer_id:int}/stats", response_model=schemas.CustomerStatsOut, tags=["customers"])
+def customer_stats(
+    customer_id: int,
+    business: models.Business = Depends(require_business),
+    db: Session = Depends(get_db),
+):
+    customer = db.scalar(select(models.Customer).where(models.Customer.id == customer_id, models.Customer.business_id == business.id))
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    orders_count, total_spend = db.execute(
+        select(func.count(models.Sale.id), func.coalesce(func.sum(models.Sale.total_minor), 0))
+        .where(models.Sale.customer_id == customer.id, models.Sale.business_id == business.id)
+    ).one()
+    last_sale = db.scalar(
+        select(models.Sale.created_at)
+        .where(models.Sale.customer_id == customer.id, models.Sale.business_id == business.id)
+        .order_by(models.Sale.created_at.desc())
+        .limit(1)
+    )
+    return {
+        "customer": customer,
+        "total_spend_minor": total_spend,
+        "order_count": orders_count,
+        "average_order_minor": round(total_spend / orders_count) if orders_count else 0,
+        "first_order_date": db.scalar(
+            select(func.min(models.Sale.created_at)).where(models.Sale.customer_id == customer.id, models.Sale.business_id == business.id)
+        ),
+        "latest_order_date": last_sale,
+        "recent_sales": db.scalars(
+            select(models.Sale)
+            .options(selectinload(models.Sale.items))
+            .where(models.Sale.customer_id == customer.id, models.Sale.business_id == business.id)
+            .order_by(models.Sale.created_at.desc())
+            .limit(50)
+        ).all(),
+    }
+
+
 @app.post("/api/v1/customers/import", tags=["customers"])
 def import_customers(payload: schemas.CustomerImportRequest, business: models.Business = Depends(require_business), _role: models.BusinessMembership = Depends(require_roles("owner", "admin", "sales")), db: Session = Depends(get_db)):
     seen: set[str] = set()
@@ -720,6 +792,7 @@ def create_sale(payload: schemas.SaleCreate, business: models.Business = Depends
             product_name=product.name,
             quantity=quantity,
             unit_price_minor=product.price_minor,
+            unit_cost_minor=product.cost_price_minor,
         ))
         sale.total_minor += product.price_minor * quantity
     db.add(sale)
@@ -904,6 +977,7 @@ def update_sale(sale_id: int, payload: schemas.SaleCorrection, business: models.
             product_name=product.name,
             quantity=item.quantity,
             unit_price_minor=item.unit_price_minor,
+            unit_cost_minor=product.cost_price_minor,
         ))
     db.commit()
     db.refresh(sale)
@@ -961,6 +1035,20 @@ def dashboard_summary(
             select(func.count(models.Sale.id), func.coalesce(func.sum(models.Sale.total_minor), 0))
             .where(*conditions)
         ).one()
+    cost = db.execute(
+        select(
+            func.count(models.SaleItem.id),
+            func.count(models.SaleItem.unit_cost_minor),
+            func.coalesce(func.sum(models.SaleItem.quantity * models.SaleItem.unit_cost_minor), 0),
+        )
+        .join(models.Sale, models.Sale.id == models.SaleItem.sale_id)
+        .where(*conditions)
+        .where(*([models.SaleItem.product_id == product_id] if product_id is not None else []))
+    ).one()
+    item_count, known_cost_count, cost_minor = cost
+    cost_complete = item_count == known_cost_count
+    gross_profit = revenue - cost_minor if cost_complete else None
+    profit_margin = round((gross_profit / revenue) * 100, 1) if revenue and gross_profit is not None else None
     return {
         "business_id": business.id,
         "currency": business.currency,
@@ -968,6 +1056,10 @@ def dashboard_summary(
         "to_date": end_day,
         "order_count": count,
         "revenue_minor": revenue,
+        "cost_minor": cost_minor if cost_complete else None,
+        "gross_profit_minor": gross_profit,
+        "profit_margin_pct": profit_margin,
+        "profit_data_complete": cost_complete,
         "average_order_value_minor": round(revenue / count) if count else 0,
     }
 

@@ -1,15 +1,26 @@
 .invite-banner {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin: 0 0 22px;
-  padding: 11px 12px;
-  border: 1px solid #d9ebdf;
-  border-radius: 7px;
-  background: #edf7f0;
-  color: #286744;
-  font-size: 10px;
-  line-height: 1.45;
+  gap: 6px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--primary-border);
+  border-radius: var(--radius-md);
+  background: var(--primary-subtle);
+  color: var(--primary-text);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.invite-banner strong { font-size: 11px; }
+.invite-banner strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.invite-banner a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  margin-top: 4px;
+}
