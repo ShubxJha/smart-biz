@@ -2,6 +2,7 @@ import hashlib
 import csv
 import logging
 import os
+from collections import Counter, defaultdict
 from io import StringIO
 import secrets
 from datetime import date, datetime, time, timedelta, timezone
@@ -809,27 +810,30 @@ def import_sales(payload: schemas.SaleImportRequest, business: models.Business =
     customers_by_name: dict[str, list[models.Customer]] = {}
     for customer in customers:
         customers_by_name.setdefault(customer.name.casefold(), []).append(customer)
-    existing_refs = {
-        reference.casefold()
-        for reference in db.scalars(select(models.Sale.external_reference).where(
+    submitted_refs = {row.sale_ref.casefold() for row in payload.rows}
+    existing_sales = db.scalars(
+        select(models.Sale)
+        .options(selectinload(models.Sale.items))
+        .where(
             models.Sale.business_id == business.id,
-            models.Sale.external_reference.is_not(None),
-        )).all()
-        if reference
+            func.lower(models.Sale.external_reference).in_(submitted_refs),
+        )
+    ).all()
+    existing_by_ref = {
+        sale.external_reference.casefold(): sale
+        for sale in existing_sales
+        if sale.external_reference
     }
 
     groups: dict[str, dict[str, object]] = {}
     conflicts: list[dict[str, object]] = []
     for row_number, row in enumerate(payload.rows, start=2):
         reference = row.sale_ref.casefold()
-        if reference in existing_refs:
-            conflicts.append({"row": row_number, "message": f"Sale reference {row.sale_ref} has already been imported"})
-            continue
         sold_at = row.sold_at.astimezone(timezone.utc)
         customer_name = row.customer_name.casefold() if row.customer_name else None
         group = groups.get(reference)
         if group is None:
-            group = {"reference": row.sale_ref, "sold_at": sold_at, "customer_name": customer_name, "items": [], "total": 0}
+            group = {"reference": row.sale_ref, "sold_at": sold_at, "customer_name": customer_name, "items": [], "total": 0, "first_row": row_number}
             groups[reference] = group
         elif group["sold_at"] != sold_at or group["customer_name"] != customer_name:
             conflicts.append({"row": row_number, "message": "Rows with the same sale_ref must have the same sold_at and customer_name"})
@@ -852,14 +856,51 @@ def import_sales(payload: schemas.SaleImportRequest, business: models.Business =
             conflicts.append({"row": row_number, "message": "Sale total exceeds the supported maximum"})
             continue
         group["total"] = new_total
-        group["items"].append((product, row.quantity, row.unit_price_minor))
+        group["items"].append((product, row.quantity, row.unit_price_minor, row.unit_cost_minor))
         group["customer"] = customer
 
-    if conflicts:
-        raise HTTPException(status_code=409, detail={"message": "No sales were imported. Fix the flagged rows and try again.", "rows": conflicts})
-
     sales: list[models.Sale] = []
-    for group in groups.values():
+    cost_backfills: list[tuple[models.SaleItem, int]] = []
+    for reference, group in groups.items():
+        existing_sale = existing_by_ref.get(reference)
+        if existing_sale is not None:
+            row_number = int(group["first_row"])
+            incoming_items = group["items"]
+            if not any(unit_cost_minor is not None for _, _, _, unit_cost_minor in incoming_items):
+                conflicts.append({"row": row_number, "message": f"Sale reference {group['reference']} already exists. Include unit_cost to add missing historical costs."})
+                continue
+
+            existing_created_at = existing_sale.created_at
+            if existing_created_at.tzinfo is None:
+                existing_created_at = existing_created_at.replace(tzinfo=timezone.utc)
+            else:
+                existing_created_at = existing_created_at.astimezone(timezone.utc)
+            customer = group.get("customer")
+            incoming_counts = Counter((product.id, quantity, unit_price_minor) for product, quantity, unit_price_minor, _ in incoming_items)
+            existing_counts = Counter((item.product_id, item.quantity, item.unit_price_minor) for item in existing_sale.items)
+            if (
+                existing_created_at != group["sold_at"]
+                or (customer is not None and existing_sale.customer_id != customer.id)
+                or existing_sale.total_minor != group["total"]
+                or incoming_counts != existing_counts
+            ):
+                conflicts.append({"row": row_number, "message": f"Sale reference {group['reference']} exists, but its date, customer, or line items do not match. No changes were made."})
+                continue
+
+            line_items_by_key: dict[tuple[int | None, int, int], list[models.SaleItem]] = defaultdict(list)
+            for item in existing_sale.items:
+                line_items_by_key[(item.product_id, item.quantity, item.unit_price_minor)].append(item)
+            for product, quantity, unit_price_minor, unit_cost_minor in incoming_items:
+                item = line_items_by_key[(product.id, quantity, unit_price_minor)].pop(0)
+                if unit_cost_minor is None:
+                    continue
+                if item.unit_cost_minor is None:
+                    cost_backfills.append((item, unit_cost_minor))
+                elif item.unit_cost_minor != unit_cost_minor:
+                    conflicts.append({"row": row_number, "message": f"Sale reference {group['reference']} already has a different cost for {product.sku}. Existing costs were preserved."})
+                    break
+            continue
+
         sale = models.Sale(
             business_id=business.id,
             customer_id=group["customer"].id if group.get("customer") else None,
@@ -868,21 +909,28 @@ def import_sales(payload: schemas.SaleImportRequest, business: models.Business =
             external_reference=group["reference"],
             created_at=group["sold_at"],
         )
-        for product, quantity, unit_price_minor in group["items"]:
+        for product, quantity, unit_price_minor, unit_cost_minor in group["items"]:
             sale.items.append(models.SaleItem(
                 product_id=product.id,
                 product_name=product.name,
                 quantity=quantity,
                 unit_price_minor=unit_price_minor,
+                unit_cost_minor=unit_cost_minor,
             ))
         sales.append(sale)
+
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "No sales were imported or updated. Fix the flagged rows and try again.", "rows": conflicts})
+
+    for item, unit_cost_minor in cost_backfills:
+        item.unit_cost_minor = unit_cost_minor
     db.add_all(sales)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="No sales were imported because a sale reference was already added. Refresh and try again.") from None
-    return {"created": len(sales), "rows": len(payload.rows)}
+    return {"created": len(sales), "cost_lines_updated": len(cost_backfills), "rows": len(payload.rows)}
 
 
 @app.get("/api/v1/sales", response_model=list[schemas.SaleOut], tags=["sales"])

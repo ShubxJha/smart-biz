@@ -294,6 +294,7 @@ class SaleImportItem(BaseModel):
     sku: str = Field(min_length=1, max_length=64)
     quantity: int = Field(gt=0, le=2_147_483_647)
     unit_price_minor: int = Field(ge=0, le=2_147_483_647)
+    unit_cost_minor: int | None = Field(default=None, ge=0, le=2_147_483_647)
 
     @field_validator("sale_ref", "sku", "customer_name", mode="before")
     @classmethod

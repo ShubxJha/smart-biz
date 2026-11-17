@@ -865,11 +865,15 @@ export default function Home() {
     setEntryKind(kind);
   }
 
-  function entrySaved(kind: EntryKind, importedCount?: number) {
+  function entrySaved(kind: EntryKind, importedCount?: number, updatedCostLineCount = 0) {
     const messages: Record<EntryKind, string> = {
       product: importedCount === undefined ? "Product added to your inventory." : `${importedCount} products imported to inventory.`,
       customer: importedCount === undefined ? "Customer added to records." : `${importedCount} customers imported to records.`,
-      sale: importedCount === undefined ? "Sale recorded and inventory updated." : `${importedCount} historical sales imported.`,
+      sale: importedCount === undefined ? "Sale recorded and inventory updated." : importedCount > 0
+        ? `${importedCount} historical sales imported${updatedCostLineCount ? `; costs saved for ${updatedCostLineCount} line items` : ""}.`
+        : updatedCostLineCount > 0
+          ? `Costs added to ${updatedCostLineCount} existing historical sale line items.`
+          : "No new sales; historical cost data is already up to date.",
     };
     setEntryKind(null);
     addToast(messages[kind], "success");
@@ -1529,23 +1533,25 @@ export default function Home() {
                   {loading ? "Refreshing…" : "Apply Range"}
                 </button>
 
-                <button
-                  className="text-button clear-filters"
-                  onClick={() => {
-                    setFilterCustomerId("");
-                    setFilterProductId("");
-                    const day = todayInZone(business?.timezone);
-                    setEnd(day);
-                    setStart(earlier(day, 29));
-                  }}
-                >
-                  Reset
-                </button>
+                <div className="filter-actions">
+                  <button
+                    type="button"
+                    className="text-button clear-filters"
+                    onClick={() => {
+                      setFilterCustomerId("");
+                      setFilterProductId("");
+                      const day = todayInZone(business?.timezone);
+                      setEnd(day);
+                      setStart(earlier(day, 29));
+                    }}
+                  >
+                    Reset
+                  </button>
+                  <button className="filter-export" onClick={() => void downloadCsv()} title="Export filtered report">
+                    <Icon name="download" size={16} /> Export filtered report
+                  </button>
+                </div>
               </div>
-
-              <button className="filter-export" onClick={() => void downloadCsv()} title="Export filtered report">
-                <Icon name="download" size={18} />
-              </button>
             </section>
           )}
 
