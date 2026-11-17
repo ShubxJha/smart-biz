@@ -1533,23 +1533,25 @@ export default function Home() {
                   {loading ? "Refreshing…" : "Apply Range"}
                 </button>
 
-                <button
-                  className="text-button clear-filters"
-                  onClick={() => {
-                    setFilterCustomerId("");
-                    setFilterProductId("");
-                    const day = todayInZone(business?.timezone);
-                    setEnd(day);
-                    setStart(earlier(day, 29));
-                  }}
-                >
-                  Reset
-                </button>
+                <div className="filter-actions">
+                  <button
+                    type="button"
+                    className="text-button clear-filters"
+                    onClick={() => {
+                      setFilterCustomerId("");
+                      setFilterProductId("");
+                      const day = todayInZone(business?.timezone);
+                      setEnd(day);
+                      setStart(earlier(day, 29));
+                    }}
+                  >
+                    Reset
+                  </button>
+                  <button className="filter-export" onClick={() => void downloadCsv()} title="Export filtered report">
+                    <Icon name="download" size={16} /> Export filtered report
+                  </button>
+                </div>
               </div>
-
-              <button className="filter-export" onClick={() => void downloadCsv()} title="Export filtered report">
-                <Icon name="download" size={18} />
-              </button>
             </section>
           )}
 

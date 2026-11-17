@@ -971,24 +971,45 @@ a {
 }
 
 .clear-filters {
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 0 4px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  transition: all 0.15s ease;
 }
 
 .clear-filters:hover {
-  color: var(--accent-rose);
+  border-color: var(--border-emphasis);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .filter-export {
-  width: 36px;
   height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-default);
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
   transition: all 0.15s ease;
 }
 
@@ -996,6 +1017,12 @@ a {
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-emphasis);
+}
+
+.clear-filters:focus-visible,
+.filter-export:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Instant Search & Tab Filter Toolbar for Tables */
@@ -2394,6 +2421,10 @@ tbody tr:last-child td {
     margin-left: 0;
     flex-direction: column;
     align-items: stretch;
+  }
+  .filter-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
   .date-controls {
     flex-wrap: wrap;
