@@ -15,6 +15,7 @@ class SmartBizApi {
   final String baseUrl;
   final http.Client _client;
   String? _token;
+  String? _refreshToken;
   int? businessId;
 
   bool get isSignedIn => _token != null && businessId != null;
@@ -41,6 +42,7 @@ class SmartBizApi {
     );
     final data = _decode(response);
     _token = data['access_token'] as String?;
+    _refreshToken = data['refresh_token'] as String?;
     final memberships = (data['memberships'] as List<dynamic>? ?? const []);
     if (memberships.isEmpty) {
       _token = null;
@@ -55,11 +57,14 @@ class SmartBizApi {
 
   Future<void> signOut() async {
     try {
-      if (isSignedIn) await _request('POST', '/api/v1/auth/logout');
+      if (isSignedIn) {
+        await _request('POST', '/api/v1/auth/logout', body: {'refresh_token': _refreshToken});
+      }
     } catch (_) {
       // Clear the local session even when the API is offline or the token expired.
     } finally {
       _token = null;
+      _refreshToken = null;
       businessId = null;
     }
   }
@@ -94,7 +99,7 @@ class SmartBizApi {
     String method,
     String path, {
     Map<String, dynamic>? body,
-  }) {
+  }) async {
     if (!isSignedIn)
       throw const SmartBizException('Please sign in to continue.');
     final headers = {
@@ -103,14 +108,29 @@ class SmartBizApi {
       'X-Business-Id': '$businessId',
     };
     final uri = Uri.parse('$baseUrl$path');
-    return switch (method) {
-      'POST' => _client.post(
-        uri,
-        headers: headers,
-        body: jsonEncode(body ?? {}),
-      ),
+    Future<http.Response> send() => switch (method) {
+      'POST' => _client.post(uri, headers: headers, body: jsonEncode(body ?? {})),
       _ => _client.get(uri, headers: headers),
     };
+    var response = await send();
+    if (response.statusCode == 401 && _refreshToken != null && path != '/api/v1/auth/refresh') {
+      final refreshResponse = await _client.post(
+        Uri.parse('$baseUrl/api/v1/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': _refreshToken}),
+      );
+      if (refreshResponse.statusCode >= 200 && refreshResponse.statusCode < 300) {
+        final fresh = _asMap(_decode(refreshResponse));
+        _token = fresh['access_token'] as String?;
+        _refreshToken = fresh['refresh_token'] as String?;
+        headers['Authorization'] = 'Bearer $_token';
+        if (path == '/api/v1/auth/logout') {
+          body = {'refresh_token': _refreshToken};
+        }
+        response = await send();
+      }
+    }
+    return response;
   }
 
   dynamic _decode(http.Response response) {
@@ -124,6 +144,7 @@ class SmartBizApi {
       final detail = data is Map<String, dynamic> ? data['detail'] : null;
       if (response.statusCode == 401) {
         _token = null;
+        _refreshToken = null;
         businessId = null;
       }
       throw SmartBizException(

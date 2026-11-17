@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 
 export type EntryKind = "product" | "customer" | "sale";
-type ProductRecord = { id: number; name: string; sku: string; price_minor: number; stock_quantity: number; active: boolean };
+type ProductRecord = { id: number; name: string; sku: string; price_minor: number; cost_price_minor?: number | null; stock_quantity: number; active: boolean };
 type CustomerRecord = { id: number; name: string; email: string | null; phone: string | null };
 type SaleLine = { id: number; product_id: string; quantity: string };
 type Requester = (path: string, init?: RequestInit) => Promise<Response>;
@@ -37,6 +37,39 @@ export default function DataEntryModal({ kind, businessId, currency, request, st
   const [nextLineId, setNextLineId] = useState(2);
   const [customerId, setCustomerId] = useState("");
   const [importMode, setImportMode] = useState(startInImport);
+  const [scanInput, setScanInput] = useState("");
+  const [scanNotice, setScanNotice] = useState("");
+
+  function handleScan(skuToMatch: string) {
+    const trimmed = skuToMatch.trim();
+    if (!trimmed) return;
+    const matched = products.find(
+      (p) => p.active && p.stock_quantity > 0 && p.sku.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (!matched) {
+      setScanNotice(`No active in-stock item found with SKU "${trimmed}"`);
+      return;
+    }
+    const existingIndex = lines.findIndex((l) => Number(l.product_id) === matched.id);
+    if (existingIndex >= 0) {
+      const curQty = Number(lines[existingIndex].quantity) || 1;
+      if (curQty < matched.stock_quantity) {
+        updateLine(lines[existingIndex].id, "quantity", String(curQty + 1));
+        setScanNotice(`✓ ${matched.name} qty updated to ${curQty + 1}`);
+      } else {
+        setScanNotice(`Limit reached: Only ${matched.stock_quantity} in stock for ${matched.name}`);
+      }
+    } else {
+      if (lines.length === 1 && !lines[0].product_id) {
+        updateLine(lines[0].id, "product_id", String(matched.id));
+      } else {
+        setLines((current) => [...current, { id: nextLineId, product_id: String(matched.id), quantity: "1" }]);
+        setNextLineId((id) => id + 1);
+      }
+      setScanNotice(`✓ Added ${matched.name} to cart`);
+    }
+    setScanInput("");
+  }
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -82,6 +115,7 @@ export default function DataEntryModal({ kind, businessId, currency, request, st
           name: String(form.get("name")).trim(),
           sku: String(form.get("sku")).trim(),
           price_minor: Math.round(Number(form.get("price")) * 100),
+          cost_price_minor: String(form.get("cost_price") || "").trim() ? Math.round(Number(form.get("cost_price")) * 100) : null,
           stock_quantity: Number(form.get("stock_quantity")),
         }),
       });
@@ -160,7 +194,8 @@ export default function DataEntryModal({ kind, businessId, currency, request, st
           <label>Product name<input name="name" placeholder="e.g. Notebook" required maxLength={160}/></label>
           <label>SKU<input name="sku" placeholder="e.g. NOTE-001" required maxLength={64}/></label>
           <div className="entry-field-row">
-            <label>Price ({currency})<input name="price" type="number" min="0" step="0.01" placeholder="50.00" required/></label>
+            <label>Selling Price ({currency})<input name="price" type="number" min="0" step="0.01" placeholder="50.00" required/></label>
+            <label>Cost Price ({currency}) <span className="entry-optional">Optional</span><input name="cost_price" type="number" min="0" step="0.01" placeholder="30.00"/></label>
             <label>Starting stock<input name="stock_quantity" type="number" min="0" step="1" defaultValue="0" required/></label>
           </div>
           {error && <p className="entry-error" role="alert">{error}</p>}
@@ -188,6 +223,37 @@ export default function DataEntryModal({ kind, businessId, currency, request, st
       {kind === "sale" && !importMode && <form className="entry-form entry-sale-form" onSubmit={submitSale}>
         {recordsLoading && <p className="entry-hint">Loading your products and customers…</p>}
         {!recordsLoading && products.filter((product) => product.active && product.stock_quantity > 0).length === 0 && <p className="entry-callout">Add a product with stock before recording a sale.</p>}
+
+        <div className="barcode-scanner-box">
+          <label className="barcode-scanner-label">
+            <span>⚡ Fast Barcode / SKU Scan</span>
+            <div className="barcode-input-wrap">
+              <input
+                type="text"
+                className="barcode-scanner-input"
+                placeholder="Scan barcode or type SKU and hit Enter..."
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleScan(scanInput);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="secondary-button barcode-add-btn"
+                onClick={() => handleScan(scanInput)}
+                disabled={!scanInput.trim()}
+              >
+                Add SKU
+              </button>
+            </div>
+          </label>
+          {scanNotice && <p className="barcode-notice" role="status">{scanNotice}</p>}
+        </div>
+
         <div className="entry-sale-lines">
           {lines.map((line) => <div className="entry-sale-line" key={line.id}>
             <label>Product<select required value={line.product_id} onChange={(event) => updateLine(line.id, "product_id", event.target.value)}>
@@ -295,7 +361,7 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
         setFilename(file.name);
         return;
       }
-      const expected = kind === "product" ? ["name", "sku", "price", "stock_quantity"]
+      const expected = kind === "product" ? ["name", "sku", "price", "cost_price", "stock_quantity"]
         : kind === "customer" ? ["name", "email", "phone"]
           : ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price"];
       const required = kind === "product" ? ["name", "sku", "price"]
@@ -321,10 +387,12 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
         if (kind === "product") {
           const sku = get("sku");
           const price = get("price");
+          const costPrice = get("cost_price");
           const stock = get("stock_quantity") || "0";
           data.sku = sku;
           data.price_minor = 0;
           data.stock_quantity = 0;
+          data.cost_price_minor = null;
           if (!sku) errors.push("SKU is required");
           if (sku.length > 64) errors.push("SKU must be 64 characters or fewer");
           if (sku) {
@@ -334,6 +402,10 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
           }
           if (!/^\d+(?:\.\d{1,2})?$/.test(price) || !Number.isSafeInteger(Number(price) * 100) || Number(price) * 100 > 2147483647) errors.push("Price must be zero or more with up to 2 decimals");
           else data.price_minor = Math.round(Number(price) * 100);
+          if (costPrice) {
+            if (!/^\d+(?:\.\d{1,2})?$/.test(costPrice) || !Number.isSafeInteger(Number(costPrice) * 100) || Number(costPrice) * 100 > 2147483647) errors.push("Cost price must be zero or more with up to 2 decimals");
+            else data.cost_price_minor = Math.round(Number(costPrice) * 100);
+          }
           if (!/^\d+$/.test(stock) || !Number.isSafeInteger(Number(stock)) || Number(stock) > 2147483647) errors.push("Stock must be a whole number zero or more");
           else data.stock_quantity = Number(stock);
         } else if (kind === "customer") {
@@ -396,7 +468,7 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
   }
 
   function downloadTemplate() {
-    const headers = kind === "product" ? "name,sku,price,stock_quantity\r\n"
+    const headers = kind === "product" ? "name,sku,price,cost_price,stock_quantity\r\n"
       : kind === "customer" ? "name,email,phone\r\n"
         : "sale_ref,sold_at,customer_name,sku,quantity,unit_price\r\n";
     const url = URL.createObjectURL(new Blob([headers], { type: "text/csv;charset=utf-8" }));

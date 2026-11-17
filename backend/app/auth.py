@@ -18,14 +18,15 @@ if JWT_SECRET is None or len(JWT_SECRET) < 32:
     raise RuntimeError("Set JWT_SECRET to a random secret with at least 32 characters")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_TTL = timedelta(minutes=30)
+REFRESH_TOKEN_TTL = timedelta(days=7)
 password_hasher = PasswordHash.recommended()
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def unauthorized_token() -> HTTPException:
+def unauthorized_token(detail: str = "Invalid or expired access token") -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired access token",
+        detail=detail,
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -45,6 +46,26 @@ def create_access_token(user_id: int) -> str:
         JWT_SECRET,
         algorithm=JWT_ALGORITHM,
     )
+
+
+def create_refresh_token(user_id: int) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"sub": str(user_id), "jti": secrets.token_urlsafe(32), "iat": now, "exp": now + REFRESH_TOKEN_TTL, "type": "refresh"},
+        JWT_SECRET,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def decode_refresh_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        int(payload["sub"])
+        if payload.get("type") != "refresh" or not payload.get("jti"):
+            raise InvalidTokenError("Invalid token claims")
+    except (InvalidTokenError, KeyError, TypeError, ValueError):
+        raise unauthorized_token("Invalid or expired refresh token") from None
+    return payload
 
 
 def decode_access_token(

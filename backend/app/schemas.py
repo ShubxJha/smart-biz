@@ -69,10 +69,19 @@ class MembershipOut(BaseModel):
 
 class AuthOut(BaseModel):
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
     expires_in: int
     user: UserOut
     memberships: list[MembershipOut]
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None
 
 
 class RegistrationOut(BaseModel):
@@ -207,6 +216,7 @@ class ProductImportItem(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     sku: str = Field(min_length=1, max_length=64)
     price_minor: int = Field(ge=0, le=2_147_483_647)
+    cost_price_minor: int | None = Field(default=None, ge=0, le=2_147_483_647)
     stock_quantity: int = Field(default=0, ge=0, le=2_147_483_647)
 
     @field_validator("name", "sku", mode="before")
@@ -223,6 +233,7 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     sku: str = Field(min_length=1, max_length=64)
     price_minor: int = Field(ge=0)
+    cost_price_minor: int | None = Field(default=None, ge=0)
     stock_quantity: int = Field(default=0, ge=0)
 
 
@@ -230,6 +241,7 @@ class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
     sku: str | None = Field(default=None, min_length=1, max_length=64)
     price_minor: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    cost_price_minor: int | None = Field(default=None, ge=0, le=2_147_483_647)
     stock_quantity: int | None = Field(default=None, ge=0, le=2_147_483_647)
     active: bool | None = None
 
@@ -260,6 +272,7 @@ class ProductOut(BaseModel):
     name: str
     sku: str
     price_minor: int
+    cost_price_minor: int | None = None
     stock_quantity: int
     active: bool
 
@@ -322,6 +335,7 @@ class SaleItemOut(BaseModel):
     product_name: str
     quantity: int
     unit_price_minor: int
+    unit_cost_minor: int | None = None
 
 
 class SaleOut(BaseModel):
@@ -334,3 +348,13 @@ class SaleOut(BaseModel):
     external_reference: str | None = None
     created_at: datetime
     items: list[SaleItemOut]
+
+
+class CustomerStatsOut(BaseModel):
+    customer: CustomerOut
+    order_count: int
+    total_spend_minor: int
+    average_order_minor: int
+    first_order_date: datetime | None = None
+    latest_order_date: datetime | None = None
+    recent_sales: list[SaleOut]

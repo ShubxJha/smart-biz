@@ -115,6 +115,7 @@ class Product(Base):
     __table_args__ = (
         UniqueConstraint("business_id", "sku", name="uq_product_business_sku"),
         CheckConstraint("price_minor >= 0", name="ck_product_price_nonnegative"),
+        CheckConstraint("cost_price_minor IS NULL OR cost_price_minor >= 0", name="ck_product_cost_nonnegative"),
         CheckConstraint("stock_quantity >= 0", name="ck_product_stock_nonnegative"),
     )
 
@@ -123,6 +124,7 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(160))
     sku: Mapped[str] = mapped_column(String(64))
     price_minor: Mapped[int] = mapped_column(Integer)
+    cost_price_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -153,6 +155,7 @@ class SaleItem(Base):
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_sale_item_quantity_positive"),
         CheckConstraint("unit_price_minor >= 0", name="ck_sale_item_price_nonnegative"),
+        CheckConstraint("unit_cost_minor IS NULL OR unit_cost_minor >= 0", name="ck_sale_item_cost_nonnegative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -161,4 +164,5 @@ class SaleItem(Base):
     product_name: Mapped[str] = mapped_column(String(160))
     quantity: Mapped[int] = mapped_column(Integer)
     unit_price_minor: Mapped[int] = mapped_column(Integer)
+    unit_cost_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sale: Mapped[Sale] = relationship(back_populates="items")
