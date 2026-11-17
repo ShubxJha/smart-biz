@@ -8,7 +8,7 @@ type CustomerRecord = { id: number; name: string; email: string | null; phone: s
 type SaleLine = { id: number; product_id: string; quantity: string };
 type Requester = (path: string, init?: RequestInit) => Promise<Response>;
 type ImportPreviewRow = { line: number; values: string[]; errors: string[]; data: Record<string, string | number | null> };
-type SaleImportField = "sale_ref" | "sold_at" | "customer_name" | "sku" | "quantity" | "unit_price";
+type SaleImportField = "sale_ref" | "sold_at" | "customer_name" | "sku" | "quantity" | "unit_price" | "unit_cost";
 type CsvSourceRow = { line: number; cells: string[] };
 
 type Props = {
@@ -18,7 +18,7 @@ type Props = {
   request: Requester;
   startInImport?: boolean;
   onClose: () => void;
-  onSaved: (kind: EntryKind, importedCount?: number) => void;
+  onSaved: (kind: EntryKind, importedCount?: number, updatedCostLineCount?: number) => void;
 };
 
 const TITLES: Record<EntryKind, string> = {
@@ -289,7 +289,7 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
   customers: CustomerRecord[];
   recordsLoading: boolean;
   request: Requester;
-  onSaved: (kind: EntryKind, importedCount?: number) => void;
+  onSaved: (kind: EntryKind, importedCount?: number, updatedCostLineCount?: number) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [preview, setPreview] = useState<ImportPreviewRow[]>([]);
@@ -470,7 +470,7 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
   function downloadTemplate() {
     const headers = kind === "product" ? "name,sku,price,cost_price,stock_quantity\r\n"
       : kind === "customer" ? "name,email,phone\r\n"
-        : "sale_ref,sold_at,customer_name,sku,quantity,unit_price\r\n";
+        : "sale_ref,sold_at,customer_name,sku,quantity,unit_price,unit_cost\r\n";
     const url = URL.createObjectURL(new Blob([headers], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -489,8 +489,8 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
         method: "POST",
         body: JSON.stringify({ rows: payload }),
       });
-      const result = await response.json() as { created: number };
-      onSaved(kind, result.created);
+      const result = await response.json() as { created: number; cost_lines_updated?: number };
+      onSaved(kind, result.created, result.cost_lines_updated || 0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : `Could not import ${kind}s.`);
     } finally { setSaving(false); onBusyChange(false); }
@@ -500,13 +500,13 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
   const importedCount = kind === "sale" ? new Set(preview.map((row) => String(row.data.sale_ref || "").toLowerCase()).filter(Boolean)).size : preview.length;
   const entityLabel = kind === "product" ? "products" : kind === "customer" ? "customers" : "sales";
   return <section className="csv-import-panel" aria-label={`Import ${kind}s from CSV`}>
-    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Upload your business’s sales CSV and map its columns to SmartBiz fields. Customer name is optional; include a timezone with the sale date." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
+    <div className="csv-import-intro"><div><h3>Import {entityLabel} from CSV</h3><p>{kind === "sale" ? "Upload your business’s sales CSV and map its columns to SmartBiz fields. Customer name and unit cost are optional; include a timezone with the sale date. Add unit_cost for historical profit reporting." : "Upload a CSV, review every row, then import. Nothing is saved until you confirm."}</p></div><button type="button" className="text-button csv-template-button" onClick={downloadTemplate}>Download template</button></div>
     <label className="csv-file-picker">Choose CSV file<input type="file" accept=".csv,text/csv" onChange={selectFile} disabled={reading || saving}/></label>
     {reading && <p className="entry-hint">Reading and checking the file…</p>}
     {filename && <p className="csv-file-name">{filename}</p>}
     {kind === "sale" && salesHeaders.length > 0 && <div className="sales-column-mapper">
       <div><h4>Match your columns</h4><p>We’ll suggest matches from your headers. Review them, then check the preview below.</p></div>
-      <div className="sales-column-grid">{SALE_IMPORT_FIELDS.map((field) => <label key={field}>{SALE_FIELD_LABELS[field]}{field === "customer_name" && <span className="entry-optional">Optional</span>}<select value={columnMapping[field] || ""} onChange={(event) => changeColumnMapping(field, event.target.value)}><option value="">{field === "customer_name" ? "Skip customer matching" : "Choose a CSV column"}</option>{salesHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div>
+      <div className="sales-column-grid">{SALE_IMPORT_FIELDS.map((field) => <label key={field}>{SALE_FIELD_LABELS[field]}{(field === "customer_name" || field === "unit_cost") && <span className="entry-optional">Optional</span>}<select value={columnMapping[field] || ""} onChange={(event) => changeColumnMapping(field, event.target.value)}><option value="">{field === "customer_name" || field === "unit_cost" ? "Skip this column" : "Choose a CSV column"}</option>{salesHeaders.map((header) => <option key={header} value={header}>{header}</option>)}</select></label>)}</div>
       <p className="entry-hint">Your column choices are remembered in this browser for this workspace.</p>
       {!salesMappingReady && <p className="entry-error" role="alert">Choose a column for sale reference, sale date, product, quantity, and unit price to preview the file.</p>}
     </div>}
@@ -518,7 +518,7 @@ function CsvImportPanel({ kind, businessId, currency, products, customers, recor
       <button type="button" className="primary-button" onClick={importRows} disabled={saving || recordsLoading || Boolean(errorCount) || (kind === "sale" && !salesMappingReady)}>{saving ? "Importing…" : `Import ${importedCount} ${entityLabel}`}</button>
       {errorCount > 0 && <p className="entry-hint">Correct the flagged rows in your CSV, then choose the updated file.</p>}
     </>}
-    <p className="entry-hint">CSV only · up to 500 rows and 1 MB per file.{kind !== "customer" && ` Prices use ${currency} and must have no more than 2 decimal places.`}{kind === "sale" && " Historical sales keep their original date and do not change current stock."}</p>
+    <p className="entry-hint">CSV only · up to 500 rows and 1 MB per file.{kind !== "customer" && ` Prices use ${currency} and must have no more than 2 decimal places.`}{kind === "sale" && " Include each item’s unit_cost at the time it was sold for gross profit reporting. Matching imported sales can have missing costs filled without duplicating the sale. Historical sales do not change current stock."}</p>
   </section>;
 }
 
@@ -544,7 +544,7 @@ function parseCsv(text: string): { headers: string[]; rows: { line: number; cell
   return { headers: header.cells, rows };
 }
 
-const SALE_IMPORT_FIELDS: SaleImportField[] = ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price"];
+const SALE_IMPORT_FIELDS: SaleImportField[] = ["sale_ref", "sold_at", "customer_name", "sku", "quantity", "unit_price", "unit_cost"];
 const SALE_FIELD_LABELS: Record<SaleImportField, string> = {
   sale_ref: "Sale / order reference",
   sold_at: "Sale date and time",
@@ -552,6 +552,7 @@ const SALE_FIELD_LABELS: Record<SaleImportField, string> = {
   sku: "Product SKU or name",
   quantity: "Quantity",
   unit_price: "Unit price",
+  unit_cost: "Unit cost at time of sale",
 };
 
 function normalizeHeader(header: string) {
@@ -566,6 +567,7 @@ function detectSalesColumns(headers: string[]): Partial<Record<SaleImportField, 
     sku: ["sku", "product sku", "item sku", "item code", "product code", "product name", "item name", "product", "item"],
     quantity: ["quantity", "qty", "units", "item quantity"],
     unit_price: ["unit price", "selling price", "sale price", "price per unit", "rate", "price"],
+    unit_cost: ["unit cost", "unit cost price", "cost price", "cost per unit", "purchase cost", "purchase price", "buying price", "cost"],
   };
   const mapping: Partial<Record<SaleImportField, string>> = {};
   for (const field of SALE_IMPORT_FIELDS) {
@@ -615,6 +617,7 @@ function buildSalesPreview(headers: string[], sourceRows: CsvSourceRow[], mappin
       sku: productText,
       quantity: 0,
       unit_price_minor: 0,
+      unit_cost_minor: null,
     };
     if (!saleRef) errors.push("Sale/order reference is required");
     if (saleRef.length > 128) errors.push("Sale/order reference must be 128 characters or fewer");
@@ -642,6 +645,10 @@ function buildSalesPreview(headers: string[], sourceRows: CsvSourceRow[], mappin
     const unitPriceMinor = parseImportPrice(unitPriceText);
     if (unitPriceMinor === null) errors.push("Unit price must be zero or more with up to 2 decimals");
     else data.unit_price_minor = unitPriceMinor;
+    const unitCostText = get("unit_cost");
+    const unitCostMinor = unitCostText ? parseImportPrice(unitCostText) : null;
+    if (unitCostText && unitCostMinor === null) errors.push("Unit cost must be zero or more with up to 2 decimals");
+    else data.unit_cost_minor = unitCostMinor;
 
     if (saleRef && normalizedDate) {
       const groupKey = saleRef.toLowerCase();

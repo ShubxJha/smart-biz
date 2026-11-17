@@ -865,11 +865,15 @@ export default function Home() {
     setEntryKind(kind);
   }
 
-  function entrySaved(kind: EntryKind, importedCount?: number) {
+  function entrySaved(kind: EntryKind, importedCount?: number, updatedCostLineCount = 0) {
     const messages: Record<EntryKind, string> = {
       product: importedCount === undefined ? "Product added to your inventory." : `${importedCount} products imported to inventory.`,
       customer: importedCount === undefined ? "Customer added to records." : `${importedCount} customers imported to records.`,
-      sale: importedCount === undefined ? "Sale recorded and inventory updated." : `${importedCount} historical sales imported.`,
+      sale: importedCount === undefined ? "Sale recorded and inventory updated." : importedCount > 0
+        ? `${importedCount} historical sales imported${updatedCostLineCount ? `; costs saved for ${updatedCostLineCount} line items` : ""}.`
+        : updatedCostLineCount > 0
+          ? `Costs added to ${updatedCostLineCount} existing historical sale line items.`
+          : "No new sales; historical cost data is already up to date.",
     };
     setEntryKind(null);
     addToast(messages[kind], "success");
