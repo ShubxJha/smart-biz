@@ -1,84 +1,152 @@
 # SmartBiz
 
-SmartBiz is a sales management and business analytics platform for small businesses. The API supports accounts, business memberships, customer and product records, stock-aware sales capture, and business-local analytics. The Next.js dashboard connects these workflows in a browser; the Flutter companion app is planned.
+SmartBiz is a small-business platform for managing customers, products, inventory, and sales in one workspace. It includes a responsive web dashboard and a Flutter mobile companion, backed by a shared REST API and PostgreSQL database.
 
-## Run locally
+**Hosted web app:** [smartbiz-web-qu8e.onrender.com](https://smartbiz-web-qu8e.onrender.com)
+
+## Screenshots
+
+### Web analytics dashboard
+
+The dashboard shows revenue, gross profit when sale costs are available, order and unit totals, a revenue trend, top products, and customer, product, and date filters.
+
+![SmartBiz web analytics dashboard](docs/images/smartbiz-analytics-web.png)
+
+<details>
+<summary>Sign-in and Flutter mobile screens</summary>
+
+### Web sign-in
+
+![SmartBiz web sign-in screen](docs/images/smartbiz-sign-in-web.png)
+
+### Flutter mobile overview
+
+![SmartBiz Flutter mobile overview](docs/images/smartbiz-overview-mobile.png)
+
+</details>
+
+## What’s included
+
+- **Business workspaces and access:** account registration, email verification, profile and password settings, business memberships, invitations, and role-based access.
+- **Products and inventory:** create and maintain a catalog, track stock, record cost and selling prices, and deactivate products while preserving their sales history.
+- **Customers:** maintain customer records, review purchase history, and see customer sales metrics.
+- **Sales:** record multi-item sales, update stock transactionally, edit or remove sales, and print a sales receipt.
+- **CSV imports:** import product, customer, and historical sales data with previews, validation, row-level feedback, and flexible sales-column mapping. Sales imports can include unit cost at the time of sale.
+- **Analytics and reporting:** filter sales by customer, product, and date; review dashboard totals, revenue trends, top products, gross profit and margin when costs are known; export filtered sales to CSV.
+- **Flutter companion:** sign in, review business performance, manage core product, customer, and sales workflows, and record sales from a mobile device.
+- **Account security:** hashed passwords, signed access tokens, refresh-token rotation, workspace authorization, and database constraints.
+
+Sales imports preserve historical dates and do not change current stock. Gross profit is calculated from sale-line cost snapshots; it remains unavailable for sales whose costs are missing.
+
+## Technology and architecture
+
+- **Web:** Next.js, React, TypeScript, and responsive custom CSS
+- **Mobile:** Flutter and Dart
+- **API:** Python, FastAPI, Pydantic, and SQLAlchemy
+- **Database:** PostgreSQL with Alembic migrations
+- **Local services:** Docker Compose
+- **Hosting:** Render web service, API service, and managed PostgreSQL
+
+```mermaid
+flowchart LR
+  Web[Next.js web app] -->|HTTPS / JSON| API[FastAPI REST API]
+  Mobile[Flutter app] -->|HTTPS / JSON| API
+  API --> DB[(PostgreSQL)]
+  API -. optional email .-> SMTP[SMTP provider]
+```
+
+## Run locally with Docker
 
 Install Docker Desktop, then from the repository root:
 
 ```powershell
-Copy-Item .env.example .env
-# Edit .env: replace the placeholders with a random database password and a random JWT_SECRET of at least 32 characters.
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Edit `.env` and replace `DB_PASSWORD` and `JWT_SECRET` with unique random values. Keep `.env` private; it is excluded from Git. Then start the web app, API, and database:
+
+```powershell
 docker compose up --build
 ```
 
-The dashboard is available at `http://localhost:3000`. The API is available at `http://localhost:8000`; interactive API docs are at `http://localhost:8000/docs`. Alembic applies database migrations when the API starts. `GET /health` reports API liveness.
+- Web app: <http://localhost:3000>
+- API: <http://localhost:8000>
+- Interactive API documentation: <http://localhost:8000/docs>
+- API liveness: <http://localhost:8000/health>
+- API readiness: <http://localhost:8000/ready>
 
-## Register and call the API
-
-Registration creates an account, a business, and an owner membership, then sends a one-time email verification link that expires after 24 hours. Set up SMTP to deliver verification links. Without SMTP, the API returns a manual verification URL for local development. Login and invitation acceptance require a verified email. Existing accounts must sign in once after the verification migration to receive a verification link. Passwords are hashed with Argon2; login returns a signed bearer access token that expires after 30 minutes. Registration and login have shared PostgreSQL-backed per-minute limits by client address and normalized email, so limits apply across API replicas.
-
-You can also create an account from the dashboard at `http://localhost:3000`. Sign in to view sales metrics, revenue trends, top products, recent orders, and download a CSV report. The dashboard stores its access token only for the current browser tab session. To run the web app outside Docker, use Node.js 22 or newer from `web/` with `npm install` followed by `npm run dev`; configure `NEXT_PUBLIC_API_URL` when the API is hosted somewhere other than `http://localhost:8000`. Set `WEB_ORIGINS` on the API to the dashboard's exact origin when using a different local address.
-
-```powershell
-$auth = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/auth/register -ContentType 'application/json' -Body '{"email":"owner@example.com","full_name":"Sample Owner","password":"<YOUR_UNIQUE_PASSWORD>","business_name":"Sample Shop"}'
-$businessId = $auth.memberships[0].business.id
-$headers = @{ Authorization = "Bearer $($auth.access_token)"; 'X-Business-Id' = "$businessId" }
-```
-
-Create a product, record a sale, then read the summary:
+The API applies database migrations when it starts. PostgreSQL is not exposed on the host by default. To connect a desktop database client, start the local override instead:
 
 ```powershell
-$product = Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/products -Headers $headers -ContentType 'application/json' -Body '{"name":"Notebook","sku":"NOTE-001","price_minor":5000,"stock_quantity":20}'
-Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/sales -Headers $headers -ContentType 'application/json' -Body (@{ items = @(@{ product_id = $product.id; quantity = 2 }) } | ConvertTo-Json -Depth 5)
-Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/v1/dashboard/summary -Headers $headers
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-Money values use integer minor units. For INR, `5000` represents ₹50.00. Sales snapshot product name and price, decrement stock transactionally, and reject cross-business product/customer references.
+The override maps PostgreSQL to `127.0.0.1:5433`. Use the database name, user, and password from `.env`.
 
-## Analytics and reports
+## Run the web app separately
 
-`GET /api/v1/dashboard/summary` and `GET /api/v1/sales` default to the previous 30 calendar days in the business timezone. Supply inclusive `from_date` and `to_date` values (`YYYY-MM-DD`) to choose a range; ranges are limited to 366 days. Sales lists also accept `customer_id`, `limit`, and `offset`.
+Start PostgreSQL and the API with Docker Compose, then open another terminal:
 
-- `GET /api/v1/analytics/sales-trend?interval=day` supports `day`, `week`, or `month` buckets and fills empty buckets with zeroes.
-- `GET /api/v1/analytics/top-products` returns units sold and revenue by product name.
-- `GET /api/v1/reports/sales.csv` downloads line-item sales details in the business timezone; exports over 50,000 sales are rejected so they are not silently truncated.
+```powershell
+cd web
+npm install
+$env:NEXT_PUBLIC_API_URL = "http://localhost:8000"
+npm run dev
+```
 
-All date filters are interpreted as business-local calendar dates and converted to UTC for querying. CSV text cells are escaped against spreadsheet formula injection.
+The web app will be available at <http://localhost:3000>.
 
-## Identity and roles
+## Run the Flutter app
 
-All business data routes require both `Authorization: Bearer <token>` and `X-Business-Id`. The API verifies that the signed-in user belongs to the selected business. Roles are `owner`, `admin`, `sales`, and `viewer`. Owners and admins can manage products; owners, admins, and sales members can create customers and record sales. Viewers can read business data. Only owners can grant the admin role.
+Start the API and PostgreSQL first. From a separate terminal:
 
-Owners and admins can invite a new or existing account with `POST /api/v1/businesses/invitations`, sending `{"email":"staff@example.com","role":"sales"}`. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TLS_MODE`, and `APP_BASE_URL` in `.env` to deliver a seven-day invitation link. Set `APP_BASE_URL` to the public HTTPS dashboard URL for deployment. `SMTP_TLS_MODE` supports `starttls` (default), `ssl`, or `none` for a trusted local relay. When SMTP is unset, the response includes a one-time token and invitation URL for manual delivery; if sending fails, it reports `delivery_status: "failed"` and includes the token as a fallback. Successful email delivery returns `delivery_status: "sent"` without exposing the token to the inviter. Recipients open the link and sign in or create an account using the invited email; the dashboard accepts the invitation. Invitations store only a token hash and can be revoked. Invitation email does not verify ownership of the recipient address; add account email verification before relying on it as an identity check.
+```powershell
+cd mobile
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
 
-Owners and admins can list pending invitations with `GET /api/v1/businesses/invitations` and revoke one with `DELETE /api/v1/businesses/invitations/{invitation_id}`. `DELETE /api/v1/businesses/members/{user_id}` removes a non-owner member from the selected business; owners cannot be removed through this endpoint. Membership removal blocks that user's future access to the business. `POST /api/v1/auth/logout` revokes the current access token immediately. Tokens expire after 30 minutes in any case.
+`10.0.2.2` connects an Android emulator to the host computer. For a physical device, use the computer’s reachable local network address and make sure the API is accessible from that device. See [mobile/README.md](mobile/README.md) for Android build and Chrome preview instructions.
 
-Authentication endpoints are `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, and `POST /api/v1/auth/logout`.
+## Data, analytics, and API
 
-The ignored `.env` file holds local secrets; `.env.example` contains placeholders only. Use a random JWT secret of at least 32 characters in deployment. Access tokens expire after 30 minutes; logout revokes the current token, while refresh-token rotation is not implemented yet.
+All business data is scoped to a workspace. Authenticated business requests use a bearer token and the selected `X-Business-Id`; the API enforces membership and role permissions.
 
-## Deployment on Render
+The main API groups cover authentication, business memberships, customers, products, sales, analytics, and reports. Useful endpoints include:
 
-`render.yaml` defines the SmartBiz API, dashboard, and managed PostgreSQL database in Singapore. It uses the existing Dockerfiles, connects the API through Render's private database URL, creates a random JWT secret, limits public database access, and configures readiness checks. The API accepts Render's `PORT` and runs Alembic migrations on startup.
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/dashboard/summary` | Filtered dashboard metrics, including gross profit when costs are complete |
+| `GET /api/v1/analytics/sales-trend` | Daily, weekly, or monthly revenue trend |
+| `GET /api/v1/analytics/top-products` | Product units and sales performance |
+| `GET /api/v1/sales` | Search and filter sales records |
+| `GET /api/v1/reports/sales.csv` | Export matching sales line items as CSV |
 
-To deploy, connect the private GitHub repository to Render and create a Blueprint from `render.yaml`. Review the service and database plans before applying them. During Blueprint setup, provide `APP_BASE_URL` and `WEB_ORIGINS` as the dashboard's exact HTTPS origin, `NEXT_PUBLIC_API_URL` as the API's HTTPS URL, and your SMTP host, username, password, and verified sender address. The service names suggest `https://smartbiz-web.onrender.com` and `https://smartbiz-api.onrender.com`; use the URLs Render actually assigns. Keep credentials in Render's environment settings, not in this repository. Public signup and invitation emails require working SMTP.
+Analytics and report filters support inclusive `from_date` and `to_date` values in `YYYY-MM-DD` format, plus customer and product filters where applicable. Date ranges are interpreted in the business timezone and are limited to 366 days. Money is stored in integer minor units; for INR, `5000` represents ₹50.00.
 
-After the first deploy, open the dashboard URL and verify registration, email confirmation, product/customer entry, sale recording, and stock updates. The API readiness endpoint is `/ready`; API docs are at `/docs`. If you later add a custom domain, update `APP_BASE_URL`, `WEB_ORIGINS`, and `NEXT_PUBLIC_API_URL` to match it, then rebuild the dashboard. Render Postgres public access is disabled in the Blueprint; add an IP allow rule only if you need to connect from a desktop database client.
+Product CSV columns include `name`, `sku`, `price`, `cost_price`, and `stock_quantity`. Customer imports accept `name`, `email`, and `phone`. Sales imports map source headers to sale reference, date, customer, product SKU, quantity, unit price, and optional unit cost. Include `unit_cost` for historical gross-profit reporting.
 
-For local development, use Docker Compose as described above. Its PostgreSQL port is not published by default; use `docker-compose.local.yml` when a desktop PostgreSQL client needs localhost access. The rate limiter uses PostgreSQL fixed-minute buckets and prunes expired buckets on auth requests.
+## Email configuration
 
-## Stack and layout
+SMTP is optional for local development. Without SMTP, the API provides a manual email-verification link. To send verification and invitation emails, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TLS_MODE`, and `APP_BASE_URL` in `.env` or the hosting provider’s environment settings. Never commit real credentials.
 
-- API: Python 3.12, FastAPI, SQLAlchemy, Alembic, PyJWT, pwdlib/Argon2
-- Database: PostgreSQL 16
-- Web: Next.js and TypeScript
-- Mobile: Flutter and Dart
-- `backend/`: API and database migrations
-- `web/`: browser dashboard
-- `mobile/`: Android and iOS sales and inventory app
-- `docs/`: architecture decisions
+## Render deployment
 
-## Next milestones
+The web app, API, and PostgreSQL database run as separate Render services. The repository includes Dockerfiles and a `render.yaml` configuration. For the existing manually configured services, use the URLs assigned by Render and set:
 
-1. Apply the Render Blueprint, verify production workflows and email delivery, then configure a custom domain and confirm database backup and restore procedures.
+- `NEXT_PUBLIC_API_URL` on the web service to the API’s public HTTPS URL
+- `APP_BASE_URL` and `WEB_ORIGINS` on the API to the web app’s exact HTTPS origin
+- `DATABASE_URL` to the managed PostgreSQL connection string
+- `JWT_SECRET` to a unique secret
+- SMTP settings if email delivery is required
+
+If Render auto-deploy is enabled for `main`, a push can trigger a deployment. Check the Render build logs and `/ready` endpoint after backend changes.
+
+## Repository layout
+
+```text
+backend/       FastAPI application, data models, and Alembic migrations
+web/           Next.js application
+mobile/        Flutter Android/iOS application
+docs/          Architecture notes and README screenshots
+```
