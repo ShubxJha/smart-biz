@@ -1,104 +1,121 @@
 # SmartBiz
 
-SmartBiz is a small-business platform for managing customers, products, inventory, and sales in one workspace. It includes a responsive web dashboard and a Flutter mobile companion, backed by a shared REST API and PostgreSQL database.
+SmartBiz helps small businesses manage sales, inventory, customers, and business performance from one workspace. The web dashboard and Flutter mobile app use the same API and PostgreSQL database.
 
-**Hosted web app:** [smartbiz-web-qu8e.onrender.com](https://smartbiz-web-qu8e.onrender.com)
+**Live web app:** [smartbiz-web-qu8e.onrender.com](https://smartbiz-web-qu8e.onrender.com)
 
 ## Screenshots
 
-### Web analytics dashboard
+### Analytics dashboard
 
-The dashboard shows revenue, gross profit when sale costs are available, order and unit totals, a revenue trend, top products, and customer, product, and date filters.
+Review revenue, gross profit, orders, units sold, sales trends, and top products. Filter reports by customer, product, and date.
 
-![SmartBiz web analytics dashboard](docs/images/smartbiz-analytics-web.png)
+![SmartBiz analytics dashboard](docs/images/smartbiz-analytics-web.png)
 
 <details>
-<summary>Sign-in and Flutter mobile screens</summary>
+<summary>Sign-in and mobile app</summary>
 
-### Web sign-in
+![SmartBiz sign-in page](docs/images/smartbiz-sign-in-web.png)
 
-![SmartBiz web sign-in screen](docs/images/smartbiz-sign-in-web.png)
-
-### Flutter mobile overview
-
-![SmartBiz Flutter mobile overview](docs/images/smartbiz-overview-mobile.png)
+![SmartBiz mobile overview](docs/images/smartbiz-overview-mobile.png)
 
 </details>
 
-## What’s included
+## What you can do
 
-- **Business workspaces and access:** account registration, email verification, profile and password settings, business memberships, invitations, and role-based access.
-- **Products and inventory:** create and maintain a catalog, track stock, record cost and selling prices, and deactivate products while preserving their sales history.
-- **Customers:** maintain customer records, review purchase history, and see customer sales metrics.
-- **Sales:** record multi-item sales, update stock transactionally, edit or remove sales, and print a sales receipt.
-- **CSV imports:** import product, customer, and historical sales data with previews, validation, row-level feedback, and flexible sales-column mapping. Sales imports can include unit cost at the time of sale.
-- **Analytics and reporting:** filter sales by customer, product, and date; review dashboard totals, revenue trends, top products, gross profit and margin when costs are known; export filtered sales to CSV.
-- **Flutter companion:** sign in, review business performance, manage core product, customer, and sales workflows, and record sales from a mobile device.
-- **Account security:** hashed passwords, signed access tokens, refresh-token rotation, workspace authorization, and database constraints.
+- **Track products and stock:** create and update products, prices, costs, and inventory. Deactivated products remain in past sales records.
+- **Manage customers:** keep customer details and review purchase history and sales metrics.
+- **Record and maintain sales:** create sales with multiple products, correct or remove records, and generate receipts. Stock updates with sales.
+- **Import and export data:** import customers, products, and sales from CSV with column mapping, previews, and validation. Export filtered sales reports as CSV.
+- **Understand performance:** filter dashboard results by customer, product, and date, then review revenue, gross profit, trends, and top products.
+- **Use it across devices:** work from the responsive web dashboard or the Flutter app.
+- **Manage workspace access:** create businesses, manage members and invitations, and update account settings.
 
-Sales imports preserve historical dates and do not change current stock. Gross profit is calculated from sale-line cost snapshots; it remains unavailable for sales whose costs are missing.
+Gross profit uses the cost captured for each sale line. It is only available when the sales being reported have cost data. Historical sales imports preserve their dates and do not change current stock.
 
-## Technology and architecture
+## Technology
 
-- **Web:** Next.js, React, TypeScript, and responsive custom CSS
-- **Mobile:** Flutter and Dart
-- **API:** Python, FastAPI, Pydantic, and SQLAlchemy
-- **Database:** PostgreSQL with Alembic migrations
-- **Local services:** Docker Compose
-- **Hosting:** Render web service, API service, and managed PostgreSQL
+| Part | Technology |
+|---|---|
+| Web dashboard | Next.js, React, TypeScript |
+| Mobile app | Flutter, Dart |
+| API | Python, FastAPI, SQLAlchemy |
+| Database | PostgreSQL, Alembic migrations |
+| Local development | Docker Compose |
+| Hosting | Render |
 
 ```mermaid
 flowchart LR
-  Web[Next.js web app] -->|HTTPS / JSON| API[FastAPI REST API]
-  Mobile[Flutter app] -->|HTTPS / JSON| API
+  Web[Next.js web app] --> API[FastAPI API]
+  Mobile[Flutter app] --> API
   API --> DB[(PostgreSQL)]
   API -. optional email .-> SMTP[SMTP provider]
 ```
 
-## Run locally with Docker
+## Run the full project locally
 
-Install Docker Desktop, then from the repository root:
+### Requirements
+
+- Docker Desktop with Docker Compose
+- Git, if you are cloning the repository
+
+### Start SmartBiz
+
+From the project root, create your local environment file:
 
 ```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+Copy-Item .env.example .env
 ```
 
-Edit `.env` and replace `DB_PASSWORD` and `JWT_SECRET` with unique random values. Keep `.env` private; it is excluded from Git. Then start the web app, API, and database:
+Open `.env` and replace `DB_PASSWORD` and `JWT_SECRET` with unique random values. Keep `.env` private; it contains local secrets and is excluded from Git. Then build and start the services:
 
 ```powershell
 docker compose up --build
 ```
 
-- Web app: <http://localhost:3000>
+Once the services are ready, open:
+
+- Web dashboard: <http://localhost:3000>
 - API: <http://localhost:8000>
-- Interactive API documentation: <http://localhost:8000/docs>
-- API liveness: <http://localhost:8000/health>
+- API documentation: <http://localhost:8000/docs>
 - API readiness: <http://localhost:8000/ready>
 
-The API applies database migrations when it starts. PostgreSQL is not exposed on the host by default. To connect a desktop database client, start the local override instead:
+The API runs database migrations when it starts. SMTP is optional for local development; without it, the API provides a manual verification link.
+
+To stop the services, press `Ctrl+C`. To start them in the background, add `-d` to `docker compose up`; stop background services with `docker compose down`. Your database is stored in a Docker volume and remains when the services stop.
+
+### Connect a database desktop app (optional)
+
+PostgreSQL is private to the Docker network by default. To expose it only on your local computer at port `5433`, start the local override:
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-The override maps PostgreSQL to `127.0.0.1:5433`. Use the database name, user, and password from `.env`.
+Connect your database client to host `127.0.0.1`, port `5433`, and use the database name, username, and password from `.env`.
 
 ## Run the web app separately
 
-Start PostgreSQL and the API with Docker Compose, then open another terminal:
+Start the API and database from the project root:
+
+```powershell
+docker compose up --build -d api
+```
+
+Then open another terminal and run the Next.js development server:
 
 ```powershell
 cd web
-npm install
+npm ci
 $env:NEXT_PUBLIC_API_URL = "http://localhost:8000"
 npm run dev
 ```
 
-The web app will be available at <http://localhost:3000>.
+Open <http://localhost:3000>. Stop the web server with `Ctrl+C`.
 
 ## Run the Flutter app
 
-Start the API and PostgreSQL first. From a separate terminal:
+Start the API and database as described above. Install Flutter and Android Studio, start an Android emulator, then run:
 
 ```powershell
 cd mobile
@@ -106,47 +123,33 @@ flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
-`10.0.2.2` connects an Android emulator to the host computer. For a physical device, use the computer’s reachable local network address and make sure the API is accessible from that device. See [mobile/README.md](mobile/README.md) for Android build and Chrome preview instructions.
+`10.0.2.2` is the Android emulator address for services running on your computer. On a physical device, use your computer’s local network IP address instead. For a browser preview, see [mobile/README.md](mobile/README.md).
 
-## Data, analytics, and API
+## Data and reports
 
-All business data is scoped to a workspace. Authenticated business requests use a bearer token and the selected `X-Business-Id`; the API enforces membership and role permissions.
+All customer, product, and sales records belong to a business workspace. The API checks the signed-in user’s workspace membership before allowing access.
 
-The main API groups cover authentication, business memberships, customers, products, sales, analytics, and reports. Useful endpoints include:
+CSV imports support:
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/v1/dashboard/summary` | Filtered dashboard metrics, including gross profit when costs are complete |
-| `GET /api/v1/analytics/sales-trend` | Daily, weekly, or monthly revenue trend |
-| `GET /api/v1/analytics/top-products` | Product units and sales performance |
-| `GET /api/v1/sales` | Search and filter sales records |
-| `GET /api/v1/reports/sales.csv` | Export matching sales line items as CSV |
+- **Products:** `name`, `sku`, `price`, `cost_price`, and `stock_quantity`
+- **Customers:** `name`, `email`, and `phone`
+- **Sales:** map your file’s headers to sale date/reference, customer, product SKU, quantity, unit price, and optional unit cost
 
-Analytics and report filters support inclusive `from_date` and `to_date` values in `YYYY-MM-DD` format, plus customer and product filters where applicable. Date ranges are interpreted in the business timezone and are limited to 366 days. Money is stored in integer minor units; for INR, `5000` represents ₹50.00.
+Including unit cost in a sales import enables historical gross-profit reporting. API routes and interactive request examples are available at <http://localhost:8000/docs> while running locally.
 
-Product CSV columns include `name`, `sku`, `price`, `cost_price`, and `stock_quantity`. Customer imports accept `name`, `email`, and `phone`. Sales imports map source headers to sale reference, date, customer, product SKU, quantity, unit price, and optional unit cost. Include `unit_cost` for historical gross-profit reporting.
+## Deployment
 
-## Email configuration
+The deployed application uses three Render services: the web app, the API, and PostgreSQL. The repository contains the Dockerfiles and `render.yaml` service configuration. Set production URLs and credentials in Render’s environment settings, not in source files. The web service needs `NEXT_PUBLIC_API_URL`; the API needs `DATABASE_URL`, `JWT_SECRET`, `APP_BASE_URL`, and `WEB_ORIGINS`. SMTP settings are needed to deliver verification and invitation email.
 
-SMTP is optional for local development. Without SMTP, the API provides a manual email-verification link. To send verification and invitation emails, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TLS_MODE`, and `APP_BASE_URL` in `.env` or the hosting provider’s environment settings. Never commit real credentials.
+If automatic deployment is enabled for `main`, pushing a change can start a Render deployment. Check the Render build logs and API `/ready` endpoint after deployment.
 
-## Render deployment
-
-The web app, API, and PostgreSQL database run as separate Render services. The repository includes Dockerfiles and a `render.yaml` configuration. For the existing manually configured services, use the URLs assigned by Render and set:
-
-- `NEXT_PUBLIC_API_URL` on the web service to the API’s public HTTPS URL
-- `APP_BASE_URL` and `WEB_ORIGINS` on the API to the web app’s exact HTTPS origin
-- `DATABASE_URL` to the managed PostgreSQL connection string
-- `JWT_SECRET` to a unique secret
-- SMTP settings if email delivery is required
-
-If Render auto-deploy is enabled for `main`, a push can trigger a deployment. Check the Render build logs and `/ready` endpoint after backend changes.
-
-## Repository layout
+## Project folders
 
 ```text
-backend/       FastAPI application, data models, and Alembic migrations
-web/           Next.js application
-mobile/        Flutter Android/iOS application
+backend/       FastAPI API, database models, and migrations
+web/           Next.js web dashboard
+mobile/        Flutter app
 docs/          Architecture notes and README screenshots
 ```
+
+For design decisions and detailed system structure, see [docs/architecture.md](docs/architecture.md).
